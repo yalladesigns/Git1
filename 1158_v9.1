@@ -1,0 +1,2532 @@
+/**=========================================================================================================
+Name: 		CVM Outbound - 1158 (BXP Form)
+Author:		Abdullah Al-Hussein
+Date:		27-10-2016
+=========================================================================================================
+Function Headers
+=================
+function fn_hideQuestions(int, int)
+function fn_showQuestions(int, int)
+function fn_showQ(int)
+function fn_hideQ(int)
+function fn_valCheck(int)
+function fn_indexCheck(int, int)
+function fn_getQuesCount()
+function fn_checkVisibleQuestionsForValue()
+
+=========================================================================================================
+Updates
+=================
+
+v7.5 06-02-17	Add new function fn_CashbackOffer
+
+=========================================================================================================
+*/
+/*
+//v2 updating 2nd cease reason list depending on product to cease
+//v2.1 updating promotion list
+//v2.2 pending order list for 'eir Talk and eir Fibre' fix
+//v3 changing product names due to company rebrand
+//v3.1 adding validation for account number
+//v3.2
+//v3.3 adding Save Reason 3
+//v3.3.1 adding promo '12 months half price Sky Sports promo'
+//v3.5 adding function for cessation link
+//v3.6 amending save call outcomes 25/02/16
+//v3.7 Product Cease 07/03/16
+//v3.7.1 Partial Save 08/03/16
+//v3.8 Add non relevant GAD Agent Field validation 15/03/16
+//v3.9 Adding in new function for promo email
+//v4 Adding in new function to aauto populate datsa coming from move
+//v4.1 Removing cease reasons from pending order cease list as per Matt Paris request
+//v4.2 Adding Non Relevant Sale section
+
+v6.11 adding partial save outcome11
+v6.11 adding new function for phone number check
+
+*/
+
+var pstn_pattern = /pstn/i;
+var talk_pattern = /talk/i;
+var bb_pattern = /broadband/i;
+var fibre_pattern = /fibre/i;
+var mobile_pattern = /mobile/i;
+var TV_pattern = /vision/i;
+// fn_getField
+
+
+var CashBackOffer = document.getElementById('strCDA_1158_field_0_109');
+
+var custType = document.getElementById('strCDA_1158_field_0_73');
+var lifeStage = document.getElementById('strCDA_1158_field_0_62');
+var migration = document.getElementById('strCDA_1158_field_0_81');
+var ceaseOrSwitch = document.getElementById('strCDA_1158_field_0_64');
+
+var campaignID = document.getElementById('strCDA_1158_field_0_11');
+var typeOfCall = document.getElementById('strCDA_1158_field_0_13');
+var typeOfUpgradeCall = document.getElementById('strCDA_1158_field_0_75');
+
+var CurrentService = document.getElementById('strCDA_1158_field_0_9');
+var ServiceToCease= document.getElementById('strCDA_1158_field_0_16');
+var CeasedService = document.getElementById('strCDA_1158_field_0_29');
+var SavePlus = document.getElementById('strCDA_1158_field_0_8');
+var LeavingBundle = fn_getField(21);
+var CeasedServices = fn_getField(29);
+
+var CeaseReason1 = document.getElementById('strCDA_1158_field_0_17');
+var CeaseReason2 = document.getElementById('strCDA_1158_field_0_18');
+
+var SaveReason1 = document.getElementById('strCDA_1158_field_0_22');
+var SaveReason2 = document.getElementById('strCDA_1158_field_0_23');
+var SaveReason3 = document.getElementById('strCDA_1158_field_0_69');
+
+var CallOutcome = document.getElementById('strCDA_1158_field_0_59');
+var partialSave = document.getElementById('strCDA_1158_field_0_60');
+var productCease = document.getElementById('strCDA_1158_field_0_61');
+var productCancellaltion = document.getElementById('strCDA_1158_field_0_111');
+
+var externalLink = document.getElementById('strCDA_1158_field_0_102');
+
+
+var nonRelevantSale = document.getElementById('strCDA_1158_field_0_108');
+
+var eirMobileSystem = document.getElementById('strCDA_1158_field_0_36');
+var eirMobilePlan = document.getElementById('strCDA_1158_field_0_37');
+
+var typeofUpgradeCall = document.getElementById('strCDA_1158_field_0_75');
+
+var lifeStage = document.getElementById('strCDA_1158_field_0_62');
+var typeOfCease = document.getElementById('strCDA_1158_field_0_26');
+
+var ceaseOrNot = document.getElementById('strCDA_1158_field_0_14');
+
+
+var Email = document.getElementById('strCDA_1158_field_0_7');
+var eirMobileUpgradeEmail = document.getElementById('strCDA_1158_field_0_38');
+
+var ChosenPlan = document.getElementById('strCDA_1158_field_0_78');
+
+var NewTalkPlan = document.getElementById('strCDA_1158_field_0_28');
+
+var strContact_Outcome = document.getElementById('strContact_Outcome');
+strContact_Outcome.length = 0;
+fn_TidyVerticalCheckbox(40);
+
+
+
+/*************
+FORM FUNCTIONS
+**************/
+
+
+// breaks down a string to the components of the bundle
+// goes through each combination
+// and if its not an exception adds it to the menu
+// Exception: bundle has eir Vision and the option has eir Fibre and not eir Vision
+
+function combinations(str_Active, str_Rest, arr_Comb){
+	if(!str_Active && !str_Rest)return;
+	if(!str_Rest)arr_Comb.push(str_Active);
+	else {
+		var str_FirstService = str_Rest.split(' & ')[0];
+		var str_NewRest;
+		if(str_Rest.indexOf('&')!=-1) str_NewRest = str_Rest.replace(str_FirstService+' & ','');
+		else str_NewRest = str_Rest.replace(str_FirstService,'');
+		if(!str_Active)combinations(str_FirstService, str_NewRest, arr_Comb);
+		else combinations(str_Active+' & '+str_FirstService, str_NewRest, arr_Comb);
+		combinations(str_Active, str_NewRest, arr_Comb);
+	}
+	return arr_Comb;
+}
+
+function fn_CleanAnds(str_bundle){
+	while(/ &  & /.test(str_bundle))str_bundle = str_bundle.replace(/ &  & /g,' & ');
+	str_bundle = str_bundle.replace(/(^ & | & $)/g,'');
+	return str_bundle;
+}
+
+function fn_RemoveServices(str_from, str_services){
+	var arr_services = str_services.split(' & ');
+	for(var i=0;i<arr_services.length;i++)str_from = str_from.replace(arr_services[i],'');
+	return fn_CleanAnds(str_from);
+}
+
+function fn_ServiceToCeaseList() {
+	removeAllOptions(ServiceToCease);
+	fn_AddItem(ServiceToCease, '', '');
+	var arr_Combinations = [];
+	if(!!CurrentService.value)arr_Combinations = combinations("",CurrentService.value,[]);
+	var tv_flag = CurrentService.value.indexOf('eir Vision')!=-1;
+	for(var i=0;i<arr_Combinations.length;i++){
+		if(tv_flag){
+			if(arr_Combinations[i].indexOf('eir Fibre')!=-1 && arr_Combinations[i].indexOf('eir Vision')==-1)continue;
+		}
+		fn_AddItem(ServiceToCease,arr_Combinations[i],arr_Combinations[i]);
+	}
+
+}
+
+function fn_SavePlusList() {
+	// Blank all options
+	removeAllOptions(SavePlus);
+	fn_AddItem(SavePlus, '', '');
+
+	var arr_Combinations=[];
+	var str_curr = CurrentService.value;
+	if(str_curr != 'eir Mobile')str_curr = fn_RemoveServices(str_curr,'eir Mobile');
+	var str_prefix = 'Save Plus ', str_r6 = 'eir Talk & eir Fibre & eir Vision & eir Mobile';
+	if(/(PSTN|Broadband)/.test(str_curr) || str_curr == 'eir Mobile'){
+		// Replace /(PSTN & |Broadband & |eir Mobile|PSTN|Broadband)/g
+		var str_ecom = 'PSTN & Broadband & eir Mobile';
+		str_ecom = fn_RemoveServices(str_ecom,str_curr);
+		arr_Combinations = combinations("",str_ecom, []);
+		if(!!arr_Combinations)for(var i=0;i<arr_Combinations.length;i++)fn_AddItem(SavePlus,str_prefix+arr_Combinations[i],str_prefix+arr_Combinations[i]);
+		var str_currConverted = str_curr.replace('PSTN','eir Talk').replace('Broadband','eir Fibre');
+		str_r6 = fn_RemoveServices(str_r6,str_currConverted);
+		arr_Combinations = combinations("",str_r6, []);
+		var tv_flag = str_r6.indexOf('eir Fibre')!=-1;
+		if(str_curr != 'eir Mobile')str_prefix='Save Plus NGA Migration & ';
+		if(!!arr_Combinations)for(var i=0;i<arr_Combinations.length;i++){
+			if(tv_flag)if(arr_Combinations[i].indexOf('eir Fibre')==-1 && arr_Combinations[i].indexOf('eir Vision')!=-1)continue;
+			fn_AddItem(SavePlus,str_prefix+arr_Combinations[i],str_prefix+arr_Combinations[i]);
+		}
+	}
+	else if(/(eir Talk|eir Fibre|eir Vision)/.test(str_curr)){
+		str_r6 = fn_RemoveServices(str_r6, str_curr);
+		arr_Combinations = combinations("",str_r6, []);
+		var tv_flag = str_curr.indexOf('eir Fibre')==-1;
+		if(!!arr_Combinations)for(var i=0;i<arr_Combinations.length;i++){
+			if(tv_flag){
+				if(arr_Combinations[i].indexOf('eir Fibre')==-1 && arr_Combinations[i].indexOf('eir Vision')!=-1)continue;
+			}
+			fn_AddItem(SavePlus,str_prefix+arr_Combinations[i],str_prefix+arr_Combinations[i]);
+		}
+	}
+}
+
+function fn_SavePlusNonSaleReason() {
+	fn_hideQArr([86,88,90,92]);
+	var str_curr = CurrentService.value;
+	if (!(/(PSTN|eir Talk)/.test(str_curr))) fn_showQ(86)
+	if(!(/(Broadband|eir Fibre)/.test(str_curr)))fn_showQ(88);
+	if(!(/eir Mobile/.test(str_curr))) fn_showQ(92);
+	if(!(/eir Vision/.test(str_curr))) fn_showQ(90);
+}
+
+function fn_PartialSaveLogic(){
+
+	removeAllOptions(partialSave);
+	fn_AddItem(partialSave, '', '');
+	var arr_Combinations = [];
+	if(!!CurrentService.value)arr_Combinations = combinations("",ServiceToCease.value,[]);
+	var tv_flag = ServiceToCease.value.indexOf('eir Fibre')!=-1 && ServiceToCease.value.indexOf('eir Vision')!=-1;
+	for(var i=0;i<arr_Combinations.length;i++){
+		if(tv_flag){
+			if(arr_Combinations[i].indexOf('eir Fibre')==-1 && arr_Combinations[i].indexOf('eir Vision')!=-1)continue;
+		}
+		if(ServiceToCease.value!=arr_Combinations[i])fn_AddItem(partialSave,'Partial Save '+arr_Combinations[i],'Partial Save '+arr_Combinations[i]);
+	}
+
+}
+
+function fn_CeasedServicesLogic(){
+	var CeasedServices = fn_getField(29);
+	if(/Product Cease|Account Cease/.test(CallOutcome.value))CeasedServices.value = ServiceToCease.value;
+	else if(!!partialSave.value)
+		CeasedServices.value = fn_RemoveServices(ServiceToCease.value,
+			partialSave.value.replace("Partial Save ",new String()));
+	else CeasedServices.value = "";
+}
+
+function fn_LeavingBundleLogic(){
+	var strCurr = CurrentService.value;
+	var full_bundle = 'eir Talk & eir Fibre & eir Vision & eir Mobile';
+	if(fn_getField(81).value == 'R6 Migration' || /NGA Migration/.test(SavePlus.value))
+		strCurr = strCurr.replace('PSTN', 'eir Talk').replace('Broadband','eir Fibre');
+	if(/PSTN|Broadband/.test(strCurr))full_bundle = 'PSTN & Broadband & eir Mobile';
+
+	var strCallOutcome = CallOutcome.value;
+	if(/Save Recontract|Standard Save/.test(strCallOutcome))LeavingBundle.value = strCurr;
+	else if(!!SavePlus.value){
+		 LeavingBundle.value = fn_RemoveServices(full_bundle, fn_RemoveServices(fn_RemoveServices(full_bundle,strCurr),SavePlus.value.replace("Save Plus ","").replace("NGA Migration & ","")));
+	}
+	else if(!!partialSave.value)LeavingBundle.value = fn_RemoveServices(strCurr,CeasedService.value);
+	else if(strCallOutcome == 'Product Cease')LeavingBundle.value = fn_RemoveServices(strCurr, ServiceToCease.value);
+	else if(strCallOutcome == 'Account Cease')LeavingBundle.value = "Account Cease";
+	else if(!!nonRelevantSale.value)LeavingBundle.value = fn_RemoveServices(full_bundle, fn_RemoveServices(fn_RemoveServices(full_bundle,strCurr),nonRelevantSale.value));
+	else LeavingBundle.value = "";
+}
+
+function fn_CashBackOffer(){
+
+	removeAllOptions(CashBackOffer);
+	var strPlan = NewTalkPlan.value;
+	if(/Save Recontract|Save Plus/.test(CallOutcome.value)){
+		fn_showQ(109);
+		fn_AddItem(CashBackOffer, '', '');
+		fn_AddItem(CashBackOffer, 'No', 'No');
+		var strLeavBund = LeavingBundle.value;
+		if(strLeavBund == 'Broadband')fn_AddItem(CashBackOffer, '25 euro cashback', '25 euro cashback');
+		else if(/PSTN & Broadband|eir Talk & eir Fibre/.test(strLeavBund)) switch(strLeavBund.split(' & ').length){
+			case 3:
+			case 4:
+				if(/Unlimited Mobile & UK|International/.test(strPlan))fn_AddItem(CashBackOffer, '100 euro cashback', '100 euro cashback');else if(!(/Base Rates|Legacy Voice Plan/.test(strPlan)))fn_AddItem(CashBackOffer, '50 euro cashback', '50 euro cashback');break;
+			case 2:
+				if(!(/Base Rates|Legacy Voice Plan/.test(strPlan)))fn_AddItem(CashBackOffer, '50 euro cashback', '50 euro cashback');break;
+		}
+		else fn_hideQ(109);
+	}
+	else fn_hideQ(109);
+}
+
+function fn_AllLogics(){
+	fn_CeasedServicesLogic();
+	fn_LeavingBundleLogic();
+	//fn_CashBackOffer();
+}
+
+function fn_1stCeaseReasonList () {
+
+	removeAllOptions(CeaseReason1);
+	fn_AddItem(CeaseReason1, '', '');
+	fn_AddItem(CeaseReason1, 'Customer moving address', 'Customer moving address');
+	fn_AddItem(CeaseReason1, 'Competitor offer', 'Competitor offer');
+	fn_AddItem(CeaseReason1, 'Service issue/Unable to use service', 'Service issue/Unable to use service');
+	fn_AddItem(CeaseReason1, 'Missold at POS', 'Missold at POS');
+	fn_AddItem(CeaseReason1, 'Deceased customer', 'Deceased customer');
+	fn_AddItem(CeaseReason1, 'Too expensive', 'Too expensive');
+	fn_AddItem(CeaseReason1, 'Still in contract with other provider', 'Still in contract with other provider');
+
+	if (lifeStage.value !== 'Pre Install')
+	{
+		fn_AddItem(CeaseReason1, 'Billing issue', 'Billing issue');
+		fn_AddItem(CeaseReason1, 'Not using the service', 'Not using the service');
+		fn_AddItem(CeaseReason1, 'Unhappy with service provided', 'Unhappy with service provided');
+	}
+	else{}
+
+	fn_AddItem(CeaseReason1, 'Exception/Escalation (TL approval)', 'Exception/Escalation (TL approval)');
+
+}
+
+function fn_2ndCeaseReasonList () {
+
+	//Firstly we wipe the destination
+	removeAllOptions(CeaseReason2);
+
+	//Now we do the addition parts
+
+//TOO EXPENSIVE
+
+	if (CeaseReason1.value == 'Too expensive') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Change in income circumstances', 'Change in income circumstances');
+		fn_AddItem(CeaseReason2, 'Add ons too expensive', 'Add ons too expensive');
+		fn_AddItem(CeaseReason2, 'End of promotion', 'End of promotion');
+		fn_AddItem(CeaseReason2, 'Going over plan allowance', 'Going over plan allowance');
+		fn_AddItem(CeaseReason2, 'Call charges too high', 'Call charges too high');
+		fn_AddItem(CeaseReason2, 'Not value for money', 'Not value for money');
+
+		if(mobile_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Handset too expensive', 'Handset too expensive');
+			fn_AddItem(CeaseReason2, 'Premium rate cahrges', 'Premium rate cahrges');
+		}
+
+		if (campaignID.value =="LOOSEBUNDL")
+		{
+			fn_AddItem(CeaseReason2, 'Losing FMC discount', 'Losing FMC discount');
+		}
+		if (ServiceToCease.value =="eir Mobile")
+		{
+			fn_AddItem(CeaseReason2, 'eir Mobile tariff rationalisation', 'eir Mobile tariff rationalisation');
+			fn_AddItem(CeaseReason2, 'eir Mobile tariff rationalisation incorrect letter', 'eir Mobile tariff rationalisation incorrect letter');
+		}
+	}
+//NOT USING THE SERVICE
+	else if (CeaseReason1.value == 'Not using the service') {
+
+		fn_AddItem(CeaseReason2, '', '');
+
+		if(pstn_pattern.test(ServiceToCease.value) || talk_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Not using the landline enough', 'Not using the landline enough');
+
+		}
+		if(fibre_pattern.test(ServiceToCease.value) || bb_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Not using the broadband enough', 'Not using the broadband enough');
+		}
+		if(TV_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Not using the TV enough', 'Not using the TV enough');
+			fn_AddItem(CeaseReason2, 'Not using TV in second room', 'Not using TV in second room');
+		}
+		if(mobile_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Not using the mobile enough', 'Not using the mobile enough');
+		}
+		if(CurrentService.value =="eir Mobile Broadband"){
+
+			removeAllOptions(CeaseReason2);
+			fn_AddItem(CeaseReason2, '', '');
+			fn_AddItem(CeaseReason2, 'Has fixed line broadband with eir', 'Has fixed line broadband with eir');
+			fn_AddItem(CeaseReason2, 'Has broadband with other provider', 'Has broadband with other provider');
+		}
+	}
+//SERVICE ISSUES
+	else if (CeaseReason1.value == 'Service issue/Unable to use service') {
+
+		fn_AddItem(CeaseReason2, '', '');
+
+		if (custType.value == 'Pre Install')
+		{
+			fn_AddItem(CeaseReason2, 'Failed installation - UG failure to connect', 'Failed installation - UG failure to connect');
+			fn_AddItem(CeaseReason2, 'Failed installation - Agent error', 'Failed installation - Agent error');
+			fn_AddItem(CeaseReason2, 'Failed installation - Customer refused tech install', 'Failed installation - Customer refused tech install');
+			fn_AddItem(CeaseReason2, 'Technician did not arrive / appointment missed', 'Technician did not arrive / appointment missed');
+
+		}
+
+		if(pstn_pattern.test(ServiceToCease.value) || talk_pattern.test(ServiceToCease.value) || fibre_pattern.test(ServiceToCease.value) || bb_pattern.test(ServiceToCease.value) || TV_pattern.test(ServiceToCease.value)){
+
+		fn_AddItem(CeaseReason2, 'Installation issue', 'Installation issue');
+		fn_AddItem(CeaseReason2, 'Faulty line / Intermittent service', 'Faulty line / Intermittent service');
+		fn_AddItem(CeaseReason2, 'Faulty equipment', 'Faulty equipment');
+		fn_AddItem(CeaseReason2, 'Cannot get service', 'Cannot get service');
+		}
+
+		if(mobile_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Mobile coverage', 'Mobile coverage');
+			fn_AddItem(CeaseReason2, 'Faulty handset', 'Faulty handset');
+		}
+	}
+	else if (CeaseReason1.value == 'Billing issue') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Discount / Bundle not applied', 'Discount / Bundle not applied');
+		fn_AddItem(CeaseReason2, 'Credit not applied', 'Credit not applied');
+		fn_AddItem(CeaseReason2, 'Unhappy with other charges on bill', 'Unhappy with other charges on bill');
+	}
+	else if (CeaseReason1.value == 'Customer moving address') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Already has service with other provider at new address', 'Already has service with other provider at new address');
+		fn_AddItem(CeaseReason2, 'Ceasing and not reproviding at new address', 'Ceasing and not reproviding at new address');
+		fn_AddItem(CeaseReason2, 'Moving to specialist accommodation', 'Moving to specialist accommodation');
+		fn_AddItem(CeaseReason2, 'Customer moving abroad', 'Customer moving abroad');
+	}
+	else if (CeaseReason1.value == 'Deceased customer') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'R6 Account', 'R6 Account');
+		fn_AddItem(CeaseReason2, 'eCom Account', 'eCom Account');
+		fn_AddItem(CeaseReason2, 'CM Account', 'CM Account');
+	}
+	else if (CeaseReason1.value == 'Missold at POS') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Price', 'Price');
+		fn_AddItem(CeaseReason2, 'Product', 'Product');
+		fn_AddItem(CeaseReason2, 'Contract Length', 'Contract Length');
+		fn_AddItem(CeaseReason2, 'Channel Choice', 'Channel Choice');
+		fn_AddItem(CeaseReason2, 'Appointment Timelines', 'Appointment Timelines');
+		fn_AddItem(CeaseReason2, 'GNP Teleno Change', 'GNP Teleno Change');
+		fn_AddItem(CeaseReason2, 'Sold to non account holder', 'Sold to non account holder');
+		fn_AddItem(CeaseReason2, 'Order placed incorrectly', 'Order placed incorrectly');
+
+	}
+	else if (CeaseReason1.value == 'Still in contract with other provider') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Sky', 'Sky');
+		fn_AddItem(CeaseReason2, 'Vodafone', 'Vodafone');
+		fn_AddItem(CeaseReason2, 'Virgin', 'Virgin');
+		fn_AddItem(CeaseReason2, 'Pure', 'Pure');
+		fn_AddItem(CeaseReason2, 'Three', 'Three');
+		fn_AddItem(CeaseReason2, 'Other', 'Other');
+	}
+	else if (CeaseReason1.value == 'Unhappy with service provided') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Channel choice', 'Channel choice');
+		fn_AddItem(CeaseReason2, 'Add on not added', 'Add on not added');
+		fn_AddItem(CeaseReason2, 'Slow broadband speeds', 'Slow broadband speeds');
+		fn_AddItem(CeaseReason2, 'Contract length', 'Contract length');
+
+		if(mobile_pattern.test(ServiceToCease.value)){
+			fn_AddItem(CeaseReason2, 'Cannot get early mobile upgrade', 'Cannot get early mobile upgrade');
+		}
+
+	}
+	else if (CeaseReason1.value == 'Competitor offer') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Vodafone', 'Vodafone');
+		fn_AddItem(CeaseReason2, 'Virgin', 'Virgin');
+
+		if(ServiceToCease.value=='eir Mobile'){
+			fn_AddItem(CeaseReason2, 'Three', 'Three');
+			fn_AddItem(CeaseReason2, 'Tesco Mobile', 'Tesco Mobile');
+			fn_AddItem(CeaseReason2, 'Post Mobile', 'Post Mobile');
+			fn_AddItem(CeaseReason2, '48', '48');
+			fn_AddItem(CeaseReason2, 'ID', 'ID');
+			fn_AddItem(CeaseReason2, 'Lyca', 'Lyca');
+			fn_AddItem(CeaseReason2, 'Meteor', 'Meteor');
+		}
+		else {
+			fn_AddItem(CeaseReason2, 'Sky', 'Sky');
+			fn_AddItem(CeaseReason2, 'Pure', 'Pure');
+		}
+	}
+	else if (CeaseReason1.value == 'Exception/Escalation (TL approval)') {
+		fn_AddItem(CeaseReason2, '', '');
+		fn_AddItem(CeaseReason2, 'Already logged as 30 day cease', 'Already logged as 30 day cease');
+		fn_AddItem(CeaseReason2, 'Port out error cease', 'Port out error cease');
+		fn_AddItem(CeaseReason2, 'Back office admin', 'Back office admin');
+	}
+}
+
+function fn_LifeStage () {
+
+	removeAllOptions(lifeStage);
+	fn_AddItem(lifeStage, '', '');
+
+	if (custType.value =='Pre Install')
+	{
+		fn_AddItem(lifeStage, 'Pre Install', 'Pre Install');
+	}
+	if (custType.value =='Cooling Off Period')
+	{
+		fn_AddItem(lifeStage, 'Cooling Off Period', 'Cooling Off Period');
+	}
+	if (custType.value =='Existing')
+	{
+		if (ServiceToCease.value == CurrentService.value)
+		{
+			fn_AddItem(lifeStage, 'Existing', 'Existing');
+		}
+		else
+		{
+			fn_AddItem(lifeStage, 'Existing', 'Existing');
+			fn_AddItem(lifeStage, 'Cooling Off Period', 'Cooling Off Period');
+			fn_AddItem(lifeStage, 'Pre Install', 'Pre Install');
+		}
+	}
+
+}
+
+function fn_TypeOfCease () {
+
+	removeAllOptions(typeOfCease);
+	fn_AddItem(typeOfCease, '', '');
+
+	if(ServiceToCease.value=='eir Mobile' || ceaseOrSwitch.value=='Switch' ){
+
+		fn_AddItem(typeOfCease, 'Customer wishes to switch', 'Customer wishes to switch');
+	}
+
+
+
+	if (lifeStage.value =='Pre Install' || lifeStage.value == 'Cooling Off Period' || ServiceToCease.value=='eir Vision'
+		||(CallOutcome.value=='Partial Save' && /^(eir Talk|eir Vision|eir Talk & eir Vision)$/.test(CeasedService.value))){
+		fn_AddItem(typeOfCease, 'Immediate cease by agent', 'Immediate cease by agent');
+		fn_AddItem(typeOfCease, 'Immediate cease by Back Office', 'Immediate cease by Back Office');
+	}
+	else if((ServiceToCease.value =='eir Mobile' && eirMobileSystem.value == 'R6') || CeaseReason2.value == 'Losing FMC discount' || CeaseReason2.value == 'Has fixed line broadband with eir' || (ServiceToCease.value.indexOf('eir Mobile')!=-1
+			&& fn_RemoveServices(ServiceToCease.value, partialSave.value.replace('Partial Save ',''))=='eir Mobile' && eirMobileSystem.value == 'R6'))
+	{
+		fn_AddItem(typeOfCease, 'Immediate cease by agent', 'Immediate cease by agent');
+	}
+	else{
+
+		if (CeaseReason1.value == 'Service issue/Unable to use service' || CeaseReason2.value == 'Missold at POS' || CeaseReason1.value == 'Exception/Escalation (TL approval)'){
+
+			fn_AddItem(typeOfCease, '30 day cease', '30 day cease');
+			fn_AddItem(typeOfCease, 'Immediate cease by agent', 'Immediate cease by agent');
+			fn_AddItem(typeOfCease, 'Immediate cease by Back Office', 'Immediate cease by Back Office');
+
+		}
+		else if (CeaseReason1.value == 'Deceased customer'){
+			fn_AddItem(typeOfCease, 'Immediate cease by agent', 'Immediate cease by agent');
+			fn_AddItem(typeOfCease, 'Immediate cease by Back Office', 'Immediate cease by Back Office');
+		}
+		else if (CeaseReason2.value == 'Moving to specialist accommodation'){
+			fn_AddItem(typeOfCease, '30 day cease', '30 day cease');
+			fn_AddItem(typeOfCease, 'Immediate cease by agent', 'Immediate cease by agent');
+			fn_AddItem(typeOfCease, 'Immediate cease by Back Office', 'Immediate cease by Back Office');
+		}
+		else{
+			fn_AddItem(typeOfCease, '30 day cease', '30 day cease');
+		}
+	}
+
+}
+
+function fn_1stSaveReasonList () {
+
+	removeAllOptions(SaveReason1);
+	fn_AddItem(SaveReason1, '', '');
+	fn_AddItem(SaveReason1, 'Resolved service issue', 'Resolved service issue');
+	fn_AddItem(SaveReason1, 'Resold features and benefits', 'Resold features and benefits');
+
+
+	if (lifeStage.value !== 'Pre Install')
+	{
+		fn_AddItem(SaveReason1, 'More suitable eir product', 'More suitable eir product');
+		fn_AddItem(SaveReason1, 'Move order', 'Move order');
+		fn_AddItem(SaveReason1, 'Provided eir services', 'Provided eir services');
+		fn_AddItem(SaveReason1, 'ECC applied', 'ECC applied');
+		fn_AddItem(SaveReason1, 'Resolved billing issue', 'Resolved billing issue');
+		fn_AddItem(SaveReason1, 'Monitored alarm', 'Monitored alarm');
+	}
+
+
+	if (CallOutcome.value !== 'Standard Save')
+	{
+		fn_AddItem(SaveReason1, 'Saved due to promotion', 'Saved due to promotion');
+	}
+
+
+}
+
+function fn_2ndSaveReasonList () {
+
+	//Firstly we wipe the destination
+	removeAllOptions(SaveReason2);
+
+	//Now we do the addition parts
+	if (SaveReason1.value == 'ECC applied') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Customer in contract', 'Customer in contract');
+	}
+	else if (SaveReason1.value == 'Move order') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Move order', 'Move order');
+	}
+	else if (SaveReason1.value == 'Provided eir services') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Number swap', 'Number swap');
+		fn_AddItem(SaveReason2, 'Name change', 'Name change');
+		fn_AddItem(SaveReason2, 'Call barring', 'Call barring');
+	}
+	else if (SaveReason1.value == 'Resolved service issue') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Transferred to tech support - arranged callback', 'Transferred to tech support - arranged callback');
+		fn_AddItem(SaveReason2, 'Arranged tech install', 'Arranged tech install');
+		fn_AddItem(SaveReason2, 'Update from escalation team', 'Update from escalation team');
+
+		if(fibre_pattern.test(CurrentService.value) || bb_pattern.test(CurrentService.value)){
+			fn_AddItem(SaveReason2, 'Re-issued modem', 'Re-issued modem');
+			fn_AddItem(SaveReason2, 'Issued broadband boosters', 'Issued broadband boosters');
+		}
+		if(TV_pattern.test(CurrentService.value)){
+
+			fn_AddItem(SaveReason2, 'Re-issued eir Vision box', 'Re-issued modem');
+		}
+		if(mobile_pattern.test(CurrentService.value)){
+			fn_AddItem(SaveReason2, 'Re-issued handset', 'Re-issued handset');
+			fn_AddItem(SaveReason2, 'Coverage confirmed with CC Tech', 'Coverage confirmed with CC Tech');
+		}
+	}
+	else if (SaveReason1.value == 'Saved due to promotion') {
+		fn_AddItem(SaveReason2, 'Saved due to promotion','Saved due to promotion');
+		/*fn_AddItem(SaveReason2, 'Promotion - 4 Euro off for 12 months','Promotion - 4 Euro off for 12 months');
+		fn_AddItem(SaveReason2, 'Promotion - 5 Euro off for 4 months','Promotion - 5 Euro off for 4 months');
+		fn_AddItem(SaveReason2, 'Promotion - 5 Euro off for 18 months','Promotion - 5 Euro off for 18 months');
+		fn_AddItem(SaveReason2, 'Promotion - 10 Euro off for 4 months','Promotion - 10 Euro off for 4 months');
+		fn_AddItem(SaveReason2, 'Promotion - 10 Euro off for 6 months','Promotion - 10 Euro off for 6 months');
+		fn_AddItem(SaveReason2, 'Promotion - 10 Euro off for 9 months','Promotion - 10 Euro off for 9 months');
+		fn_AddItem(SaveReason2, 'Promotion - 10 Euro off for 12 months (Competitor)','Promotion - 10 Euro off for 12 months (Competitor)');
+		fn_AddItem(SaveReason2, 'Promotion - 15 Euro off for 6 months (eCom)','Promotion - 15 Euro off for 6 months (eCom)');
+		fn_AddItem(SaveReason2, 'Promotion - Add TV - 15 Euro off for 6 months','Promotion - Add TV - 15 Euro off for 6 months');
+		fn_AddItem(SaveReason2, 'Promotion - Bundle Upgrade - 20 Euro off for 6 months','Promotion - Bundle Upgrade - 20 Euro off for 6 months');
+		fn_AddItem(SaveReason2, '','');
+		fn_AddItem(SaveReason2, '3 Months free Experience Pack Promotion','3 Months free Experience Pack Promotion');
+		fn_AddItem(SaveReason2, '1 Euro Sky Sports promotion for 6 months','1 Euro Sky Sports promotion for 6 months');
+		fn_AddItem(SaveReason2, '1 Month free Sky Sports Trial','1 Month free Sky Sports Trial');
+		fn_AddItem(SaveReason2, '3 Months Half Price Sky Sports Promotion','3 Months Half Price Sky Sports Promotion');
+		fn_AddItem(SaveReason2, '6 Months Half Price Sky Sports Promotion','6 Months Half Price Sky Sports Promotion');
+		fn_AddItem(SaveReason2, '12 Months Half Price Sky Sports Promotion','12 Months Half Price Sky Sports Promotion');
+		fn_AddItem(SaveReason2, '1 Month free Sky Cinema Trial','1 Month free Sky Cinema Trial');
+		fn_AddItem(SaveReason2, '3 Months Half Price Sky Cinema Promotion','3 Months Half Price Sky Cinema Promotion');
+		fn_AddItem(SaveReason2, '6 Months Half Price Sky Cinema Promotion','6 Months Half Price Sky Cinema Promotion');
+		fn_AddItem(SaveReason2, '12 Months Half Price Sky Cinema Promotion','12 Months Half Price Sky Cinema Promotion');
+		fn_AddItem(SaveReason2, '','');
+		fn_AddItem(SaveReason2, '10% eir Mobile CM Discount', '10% eir Mobile CM Discount');
+		fn_AddItem(SaveReason2, '1GB 6 months eir Mobile CM Discount', '1GB 6 months eir Mobile CM Discount');*/
+	}
+	else if (SaveReason1.value == 'Monitored alarm') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Monitored alarm requires phone line', 'Monitored alarm requires phone line');
+		fn_AddItem(SaveReason2, 'Sky service needs line', 'Sky service needs line');
+	}
+	else if (SaveReason1.value == 'Resolved billing issue') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Explained breakdown of bill', 'Explained breakdown of bill');
+		fn_AddItem(SaveReason2, 'Explained breakdown of bit part rental', 'Explained breakdown of bit part rental');
+		fn_AddItem(SaveReason2, 'Advised of connection fees', 'Advised of connection fees');
+		fn_AddItem(SaveReason2, 'Removed cordless phone / mailbox', 'Removed cordless phone / mailbox');
+		fn_AddItem(SaveReason2, 'Discount reapplied', 'Discount reapplied');
+
+	}
+	else if (SaveReason1.value == 'More suitable eir product') {
+		fn_AddItem(SaveReason2, '', '');
+
+		if(pstn_pattern.test(CurrentService.value) || talk_pattern.test(CurrentService.value)){
+
+			fn_AddItem(SaveReason2, 'Changed talktime package', 'Changed talktime package');
+		}
+		if(fibre_pattern.test(CurrentService.value) || bb_pattern.test(CurrentService.value)){
+
+			fn_AddItem(SaveReason2, 'Changed broadband package', 'Changed broadband package');
+		}
+		if(mobile_pattern.test(CurrentService.value)){
+
+			fn_AddItem(SaveReason2, 'Changed mobile package', 'Changed mobile package');
+			fn_AddItem(SaveReason2, 'Mobile upgrade', 'Mobile upgrade');
+
+		}
+
+		if(!fibre_pattern.test(CurrentService.value) && !bb_pattern.test(CurrentService.value)){
+			fn_AddItem(SaveReason2, 'Provided new broadband', 'Provided new broadband');
+		}
+		if(!TV_pattern.test(CurrentService.value)){
+
+			fn_AddItem(SaveReason2, 'Sold eir Vision', 'Bundle package soldSold eir Vision');
+		}
+
+		fn_AddItem(SaveReason2, 'New bundle package', 'New bundle package');
+		fn_AddItem(SaveReason2, 'International add on', 'International add on');
+		fn_AddItem(SaveReason2, 'Mobile add on', 'Mobile add on');
+
+	}
+	else if (SaveReason1.value == 'Resold features and benefits') {
+		fn_AddItem(SaveReason2, '', '');
+		fn_AddItem(SaveReason2, 'Explained value added services', 'Explained value added services');
+		fn_AddItem(SaveReason2, 'Explained discounts', 'Explained discounts');
+		fn_AddItem(SaveReason2, 'Explained bundle details', 'Explained bundle details');
+	}
+
+}
+
+function saveReason3(){
+	/*if (SaveReason2.value == 'Changed talktime package' || SaveReason2.value == 'Added talktime package')
+	{
+		document.getElementById('tableid_69').style.display = 'inline';
+
+		removeAllOptions(SaveReason3);
+		fn_AddItem(SaveReason3, '', '');
+		fn_AddItem(SaveReason3, 'eir Talk International', 'eir Talk International');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go', 'eir Talk Pay As You Go');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile', 'eir Talk Off Peak Mobile');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK', 'eir Talk Unlimited Mobile & UK');
+		fn_AddItem(SaveReason3, 'Retention eir Talk Anytime Mobile 60', 'Retention eir Talk Anytime Mobile 60');
+		fn_AddItem(SaveReason3, 'Retention eir Talk Anytime Mobile 90', 'Retention eir Talk Anytime Mobile 90');
+		fn_AddItem(SaveReason3, 'Retention eir Talk Anytime Unlimited Mobile plus UK 60', 'Retention eir Talk Anytime Unlimited Mobile plus UK 60');
+		fn_AddItem(SaveReason3, 'Retention eir Talk Off-Peak Mobile 60', 'Retention eir Talk Off-Peak Mobile 60');
+		fn_AddItem(SaveReason3, 'Retention eir Talk Off-Peak Mobile 90', 'Retention eir Talk Off-Peak Mobile 90');
+	}
+	else if (SaveReason2.value == 'Changed broadband package' || SaveReason2.value == 'Provided new broadband')
+	{
+		document.getElementById('tableid_69').style.display = 'inline';
+
+		removeAllOptions(SaveReason3);
+		fn_AddItem(SaveReason3, '', '');
+		fn_AddItem(SaveReason3, 'eir Fibre 30GB', 'eir Fibre 30GB');
+		fn_AddItem(SaveReason3, 'eir Fibre Unlimited', 'eir Fibre Unlimited');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband', 'Unlimited NGB Broadband');
+	}
+	else if (SaveReason2.value == 'New bundle package')
+	{
+		document.getElementById('tableid_69').style.display = 'inline';
+
+		removeAllOptions(SaveReason3);
+		fn_AddItem(SaveReason3, '', '');
+		fn_AddItem(SaveReason3, 'eir Talk International & Rural Broadband 30GB', 'eir Talk International & Rural Broadband 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk International & Rural Broadband Unlimited ', 'eir Talk International & Rural Broadband Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go & Rural Broadband 30GB','eir Talk Pay As You Go & Rural Broadband 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go & Rural Broadband Unlimited','eir Talk Pay As You Go & Rural Broadband Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile & Rural Broadband 30GB','eir Talk Off Peak Mobile & Rural Broadband 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile & Rural Broadband Unlimited','eir Talk Off Peak Mobile & Rural Broadband Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK & Rural Broadband 30GB','eir Talk Unlimited Mobile & UK & Rural Broadband 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK & Rural Broadband Unlimited','eir Talk Unlimited Mobile & UK & Rural Broadband Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk International International  & Rural Broadband 30GB','eir Talk International International  & Rural Broadband 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk International International  & Rural Broadband Unlimited','eir Talk International International  & Rural Broadband Unlimited');
+		fn_AddItem(SaveReason3, ' ',' ');
+		fn_AddItem(SaveReason3, 'eir Talk International & NGB 30GB','eir Talk International & NGB 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk International & NGB Unlimited','eir Talk International & NGB Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  NGB 30GB','eir Talk Pay As You Go &  NGB 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go & NGB Unlimited','eir Talk Pay As You Go & NGB Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile &  NGB 30GB','eir Talk Off Peak Mobile &  NGB 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile & NGB Unlimited','eir Talk Off Peak Mobile & NGB Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  NGB 30GB','eir Talk Unlimited Mobile & UK &  NGB 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK & NGB Unlimited','eir Talk Unlimited Mobile & UK & NGB Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk International International  &  NGB 30GB','eir Talk International International  &  NGB 30GB');
+		fn_AddItem(SaveReason3, 'eir Talk International International  Uk & NGB Unlimited','eir Talk International International  Uk & NGB Unlimited');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited','eir Talk International &  eir Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited','eir Talk Pay As You Go &  eir Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile &  eir Unlimited','eir Talk Off Peak Mobile &  eir Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited','eir Talk Unlimited Mobile & UK &  eir Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk International International  &  eir Unlimited','eir Talk International International  &  eir Unlimited');
+		fn_AddItem(SaveReason3, ' ', '');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir FTTH Unlimited','eir Talk International &  eir FTTH Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir FTTH Unlimited','eir Talk Pay As You Go &  eir FTTH Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile &  eir FTTH Unlimited','eir Talk Off Peak Mobile &  eir FTTH Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir FTTH Unlimited','eir Talk Unlimited Mobile & UK &  eir FTTH Unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk International International  &  eir FTTH Unlimited','eir Talk International International  &  eir FTTH Unlimited');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir mobile 100','eir Talk International &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir mobile 100','eir Talk Pay As You Go &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile&  eir mobile 100','eir Talk Off Peak Mobile&  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir mobile 100','eir Talk Unlimited Mobile & UK &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir mobile 100','eir Talk International International &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir mobile 400','eir Talk International &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir mobile 400','eir Talk Pay As You Go &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile &  eir mobile 400','eir Talk Off Peak Mobile &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir mobile 400','eir Talk Unlimited Mobile & UK &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk International International  &  eir mobile 400','eir Talk International International  &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir unlimited 5GB','eir Talk International &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir unlimited 5GB','eir Talk Pay As You Go &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile&  eir unlimited 5GB','eir Talk Off Peak Mobile&  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir unlimited 5GB','eir Talk Unlimited Mobile & UK &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir unlimited 5GB','eir Talk International International &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir mobile SIM only 100','eir Talk International &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir mobile SIM only 100','eir Talk Pay As You Go &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile  &  eir mobile SIM only 100','eir Talk Off Peak Mobile  &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir mobile SIM only 100','eir Talk Unlimited Mobile & UK &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir mobile SIM only 100','eir Talk International International &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir mobile SIM only 400','eir Talk International &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir mobile SIM only 400','eir Talk Pay As You Go &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile &  eir mobile SIM only 400','eir Talk Off Peak Mobile &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir mobile SIM only 400','eir Talk Unlimited Mobile & UK &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk International International  &  eir mobile SIM only 400','eir Talk International International  &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir mobile SIM only unlimited','eir Talk International &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir mobile SIM only unlimited','eir Talk Pay As You Go &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile &  eir mobile SIM only unlimited','eir Talk Off Peak Mobile &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir mobile SIM only unlimited','eir Talk Unlimited Mobile & UK &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir mobile SIM only unlimited','eir Talk International International &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir-fibre 30GB &  eir mobile 100','eir-fibre 30GB &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  &  eir mobile 100','eir-fibre Unlimited  &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband &  eir mobile 100','Unlimited NGB Broadband &  eir mobile 100');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir-fibre 30GB &  eir mobile 400','eir-fibre 30GB &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited &  eir mobile 400','eir-fibre Unlimited &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband &  eir mobile 400','Unlimited NGB Broadband &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir-fibre 30GB &  eir unlimited 5GB','eir-fibre 30GB &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited &   eir unlimited 5GB','eir-fibre Unlimited &   eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband &  eir unlimited 5GB','Unlimited NGB Broadband &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir-fibre 30GB & &  eir mobile SIM only 100','eir-fibre 30GB & &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited &  &  eir mobile SIM only 100','eir-fibre Unlimited &  &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband & &  eir mobile SIM only 100','Unlimited NGB Broadband & &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir-fibre 30GB &  eir mobile SIM only 400','eir-fibre 30GB &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited &  eir mobile SIM only 400','eir-fibre Unlimited &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband &  eir mobile SIM only 400','Unlimited NGB Broadband &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir-fibre 30GB &  eir mobile SIM only unlimited','eir-fibre 30GB &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited &  eir mobile SIM only unlimited','eir-fibre Unlimited &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'Unlimited NGB Broadband &  eir mobile SIM only unlimited','Unlimited NGB Broadband &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir fibre Unlimited & eir Vision','eir Talk International &  eir fibre Unlimited & eir Vision');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir fibre Unlimited & eir Vision','eir Talk Pay As You Go &  eir fibre Unlimited & eir Vision');
+		fn_AddItem(SaveReason3, 'eir Talk Off Peak Mobile&  eir fibre Unlimited & eir Vision','eir Talk Off Peak Mobile&  eir fibre Unlimited & eir Vision');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir fibre Unlimited & eir Vision','eir Talk Unlimited Mobile & UK &  eir fibre Unlimited & eir Vision');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir fibre Unlimited & eir Vision','eir Talk International International &  eir fibre Unlimited & eir Vision');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  & eir Vision','eir-fibre Unlimited  & eir Vision');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile 100','eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &   eir mobile 100','eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &   eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &   eir mobile 100','eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &   eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir Unlimited broadband & eir Vision &   eir mobile 100','eir Talk International International &  eir Unlimited broadband & eir Vision &   eir mobile 100');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile 400','eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &   eir mobile 400','eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &   eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile 400','eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile 400','eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile 400');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB','eir Talk International &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB','eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB','eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB','eir Talk International International &  eir Unlimited broadband & eir Vision &  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100','eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100','eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100','eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100','eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400','eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400','eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400','eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400','eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited','eir Talk International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited','eir Talk Pay As You Go &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited','eir Talk Unlimited Mobile & UK &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, 'eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited','eir Talk International International &  eir Unlimited broadband & eir Vision &  eir mobile SIM only unlimited');
+		fn_AddItem(SaveReason3, ' ', ' ');
+		fn_AddItem(SaveReason3, 'eir Fibre Unlimited  & eir Vision&  eir mobile 100','eir-fibre Unlimited  & eir Vision&  eir mobile 100');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  & eir Vision &  eir mobile 400','eir-fibre Unlimited  & eir Vision &  eir mobile 400');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  & eir Vision&  eir unlimited 5GB','eir-fibre Unlimited  & eir Vision&  eir unlimited 5GB');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  & eir Vision &  eir mobile SIM only 100','eir-fibre Unlimited  & eir Vision &  eir mobile SIM only 100');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  & eir Vision &  eir mobile SIM only 400','eir-fibre Unlimited  & eir Vision &  eir mobile SIM only 400');
+		fn_AddItem(SaveReason3, 'eir-fibre Unlimited  & eir Vision &  eir mobile SIM only unlimited','eir-fibre Unlimited  & eir Vision &  eir mobile SIM only unlimited');
+	}
+	else if (SaveReason2.value == 'Migrated to NGB')
+	{
+		document.getElementById('tableid_69').style.display = 'inline';
+
+		removeAllOptions(SaveReason3);
+		fn_AddItem(SaveReason3, 'NGB 30GB', 'NGB 30GB');
+		fn_AddItem(SaveReason3, 'NGB Unlimited', 'NGB Unlimited');
+	}
+	else if (SaveReason2.value == 'Migrated to eir Fibre')
+	{
+		document.getElementById('tableid_69').style.display = 'inline';
+
+		removeAllOptions(SaveReason3);
+		fn_AddItem(SaveReason3, 'eir Unlimited', 'eir Unlimited');
+		fn_AddItem(SaveReason3, 'eir FTTH Unlimited', 'eir FTTH Unlimited');
+	}
+	else
+	{
+		document.getElementById('tableid_69').style.display = 'none';
+	}
+	*/
+}
+
+function ceaseOutcomeLink1email(){
+	externalLink.value = "https://ww3.allnone.ie/client/client_meteor/inboundsales/userInbound-details.asp?id=1291&intLinkFormId=1158&strCDA_1291_field_0_1=--strCDA_1158_field_0_4--&strCDA_1291_field_0_4=--strCDA_1158_field_0_3--&strCDA_1291_field_0_5=--strCDA_1158_field_0_7--&strCDA_1291_field_0_25=--strCDA_1158_field_0_5--&strCDA_1291_field_0_6=--strCDA_1158_field_0_6--&strCDA_1291_field_0_22=Consumer";
+}
+
+function ceaseOutcomeLink2AgentSubmit(){
+
+	externalLink.value = "https://ww3.allnone.ie/client/client_meteor/inboundsales/userInbound-details.asp?Id=1218&intLinkFormId=1158&intLinkRecordId=--intCDA_1158_Id--&strLinkFieldListing=strCDA_1158_field_0_4,strCDA_1158_field_0_3,strCDA_1158_field_0_5,strCDA_1158_field_0_98,strCDA_1158_field_0_99,strCDA_1158_field_0_100,strCDA_1158_field_0_101,strCDA_1158_field_0_103,strCDA_1158_field_0_6";
+}
+
+function ceaseOutcomeLink3Blank(){
+	externalLink.value = "https://ww3.allnone.ie/client/client_meteor/inboundsales/userInbound-details.asp?id=1158";
+}
+
+function fn_CeaseType() {
+
+	fn_RemoveItem(CallOutcome)
+	/*if (custType.value == 'Pre Install' || lifeStage.value == 'Pre Install')
+	{
+		if (CurrentService.value == ServiceToCease.value)
+		{
+			fn_AddItem(CallOutcome, 'Account Cancellation', 'Account Cancellation');
+		}
+		else
+		{
+			fn_AddItem(CallOutcome, 'Product Cancellation', 'Product Cancellation');
+		}
+
+	}
+	else
+	{*/
+		if (CurrentService.value == ServiceToCease.value)
+		{
+			fn_AddItem(CallOutcome, 'Account Cease', 'Account Cease');
+		}
+		else
+		{
+			fn_AddItem(CallOutcome, 'Product Cease', 'Product Cease');
+		}
+		/*
+	}
+*/
+}
+
+function fn_AddMobileUpgradeValue() {
+
+	removeAllOptions(typeOfCall);
+
+
+	if ((CurrentService.value =='PSTN & Broadband & eir Mobile' || CurrentService.value =='Broadband & eir Mobile' || CurrentService.value =='eir Talk & eir Mobile' || CurrentService.value =='eir Talk & eir Fibre & eir Mobile' || CurrentService.value =='eir Talk & eir Fibre & eir Vision & eir Mobile' || CurrentService.value =='eir Fibre & eir Mobile' || CurrentService.value =='eir Fibre & eir Vision & eir Mobile' || CurrentService.value =='eir Mobile'  || CurrentService.value =='eir Mobile Broadband'))
+	{
+		fn_AddItem(typeOfCall, '', '');
+		fn_AddItem(typeOfCall, 'Save', 'Save');
+		fn_AddItem(typeOfCall, 'Non Relevant', 'Non Relevant');
+		fn_AddItem(typeOfCall, 'Dead Call', 'Dead Call');
+		fn_AddItem(typeOfCall, 'Mobile Upgrade', 'Mobile Upgrade');
+	}
+	else
+	{
+		fn_AddItem(typeOfCall, '', '');
+		fn_AddItem(typeOfCall, 'Save', 'Save');
+		fn_AddItem(typeOfCall, 'Non Relevant', 'Non Relevant');
+		fn_AddItem(typeOfCall, 'Dead Call', 'Dead Call');
+	}
+
+}
+
+function fn_NonRelevantSale () {
+
+	removeAllOptions(nonRelevantSale);
+
+	if (CurrentService.value == 'PSTN') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'Broadband', 'Broadband');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+		fn_AddItem(nonRelevantSale, 'Broadband & eir Mobile', 'Broadband & eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Fibre & eir Mobile', 'NGA Migration & eir Fibre & eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Fibre & eir Vision', 'NGA Migration & eir Fibre & eir Vision');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Fibre & eir Vision & eir Mobile', 'NGA Migration & eir Fibre & eir Vision & eir Mobile');
+	}
+	else if (CurrentService.value == 'PSTN & Broadband') {
+		fn_AddItem(nonRelevantSale, '', '');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Mobile', 'NGA Migration & eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Vision', 'NGA Migration & eir Vision');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Vision & eir Mobile', 'NGA Migration & eir Vision & eir Mobile');
+	}
+	else if (CurrentService.value == 'PSTN & Broadband & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Vision', 'NGA Migration & eir Vision');
+	}
+	else if (CurrentService.value == 'Broadband') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'PSTN', 'PSTN');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Mobile', 'NGA Migration & eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Vision', 'NGA Migration & eir Vision');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Vision & eir Mobile', 'NGA Migration & eir Vision & eir Mobile');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Talk & eir Vision & eir Mobile', 'NGA Migration & eir Talk & eir Vision & eir Mobile');
+	}
+	else if (CurrentService.value == 'Broadband & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Vision', 'NGA Migration & eir Vision');
+		fn_AddItem(nonRelevantSale, 'NGA Migration & eir Talk & eir Vision', 'NGA Migration & eir Talk & eir Vision');
+	}
+	else if (CurrentService.value == 'eir Talk') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Fibre', 'eir Fibre');
+		fn_AddItem(nonRelevantSale, 'eir Fibre & eir Vision', 'eir Fibre & eir Vision');
+		fn_AddItem(nonRelevantSale, 'eir Fibre & eir Mobile', 'eir Fibre & eir Mobile');
+		fn_AddItem(nonRelevantSale, 'eir Fibre & eir Mobile & eir Vision', 'eir Fibre & eir Mobile & eir Vision');
+	}
+	else if (CurrentService.value == 'eir Talk & eir Fibre') {
+		fn_AddItem(nonRelevantSale, '', '');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+		fn_AddItem(nonRelevantSale, 'eir Vision', 'eir Vision');
+		fn_AddItem(nonRelevantSale, 'eir Mobile & eir Vision', 'eir Mobile & eir Vision');
+	}
+	else if (CurrentService.value == 'eir Talk & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Fibre', 'eir Fibre');
+		fn_AddItem(nonRelevantSale, 'eir Fibre & eir Vision', 'eir Fibre & eir Vision');
+	}
+	else if (CurrentService.value == 'eir Talk & eir Fibre & eir Vision') {
+		fn_AddItem(nonRelevantSale, '', '');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+	}
+	else if (CurrentService.value == 'eir Talk & eir Fibre & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Vision', 'eir Vision');
+	}
+	else if (CurrentService.value == 'eir Talk & eir Fibre & eir Vision & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+	}
+	else if (CurrentService.value == 'eir Fibre') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Talk', 'eir Talk');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+		fn_AddItem(nonRelevantSale, 'eir Vision', 'eir Vision');
+		fn_AddItem(nonRelevantSale, 'eir Mobile & eir Vision', 'eir Mobile & eir Vision');
+		fn_AddItem(nonRelevantSale, 'eir Talk & eir Mobile & eir Vision', 'eir Talk & eir Mobile & eir Vision');
+	}
+	else if (CurrentService.value == 'eir Fibre & eir Vision') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Talk', 'eir Talk');
+		//fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+		fn_AddItem(nonRelevantSale, 'eir Talk & eir Mobile', 'eir Talk & eir Mobile');
+	}
+	else if (CurrentService.value == 'eir Fibre & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Talk', 'eir Talk');
+		fn_AddItem(nonRelevantSale, 'eir Vision', 'eir Vision');
+		fn_AddItem(nonRelevantSale, 'eir Talk & eir Vision', 'eir Talk & eir Vision');
+	}
+	else if (CurrentService.value == 'eir Fibre & eir Vision & eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'eir Talk', 'eir Talk');
+	}
+	else if (CurrentService.value == 'eir Mobile') {
+		fn_AddItem(nonRelevantSale, '', '');
+		fn_AddItem(nonRelevantSale, 'Broadband', 'Broadband');
+		fn_AddItem(nonRelevantSale, 'PSTN', 'PSTN');
+		fn_AddItem(nonRelevantSale, 'PSTN & Broadband', 'PSTN & Broadband');
+		fn_AddItem(nonRelevantSale, 'eir Fibre', 'eir Fibre');
+		fn_AddItem(nonRelevantSale, 'eir Fibre & eir Vision', 'eir Fibre & eir Vision');
+	}
+	else if (CurrentService.value == 'ISDN') {
+		fn_AddItem(nonRelevantSale, '', '');
+	}
+	else if (CurrentService.value == 'Virtual Line') {
+		fn_AddItem(nonRelevantSale, '', '');
+	}
+	else{
+		fn_AddItem(nonRelevantSale, '', '');
+	}
+
+
+	fn_AddItem(nonRelevantSale, 'eir Mobile', 'eir Mobile');
+
+
+}
+
+function fn_eirMobilePlan () {
+
+	removeAllOptions(eirMobilePlan);
+
+	if (eirMobileSystem.value == 'CM')
+	{
+		removeAllOptions(eirMobilePlan);
+
+		fn_AddItem(eirMobilePlan, '', '');
+		fn_AddItem(eirMobilePlan, 'FMC eMobile 150', 'FMC eMobile 150');
+		fn_AddItem(eirMobilePlan, 'FMC eMobile 300', 'FMC eMobile 300');
+		fn_AddItem(eirMobilePlan, 'FMC eMobile 500', 'FMC eMobile 500');
+		fn_AddItem(eirMobilePlan, 'FMC eMobile Unlimited & Data 18 months', 'FMC eMobile Unlimited & Data 18 months');
+		fn_AddItem(eirMobilePlan, 'Select 100', 'Select 100');
+		fn_AddItem(eirMobilePlan, 'Select 200', 'Select 200');
+		fn_AddItem(eirMobilePlan, 'Select 300', 'Select 300');
+		fn_AddItem(eirMobilePlan, 'Select 400', 'Select 400');
+		fn_AddItem(eirMobilePlan, 'Select 500', 'Select 500');
+		fn_AddItem(eirMobilePlan, 'Select Unlimited Talk & Text', 'Select Unlimited Talk & Text');
+		fn_AddItem(eirMobilePlan, 'Select Unlimited EUR74', 'Select Unlimited EUR74');
+		fn_AddItem(eirMobilePlan, 'Select Unlimited Sim Only', 'Select Unlimited Sim Only');
+		fn_AddItem(eirMobilePlan, 'Select Smart 300', 'Select Smart 300');
+		fn_AddItem(eirMobilePlan, 'Select Smart Unlimited', 'Select Smart Unlimited');
+		fn_AddItem(eirMobilePlan, 'FMC eMobile Unlimited & Data 4G', 'FMC eMobile Unlimited & Data 4G');
+		fn_AddItem(eirMobilePlan, 'FMC eMobile Unlimited & Data 4G Sim Only', 'FMC eMobile Unlimited & Data 4G Sim Only');
+		fn_AddItem(eirMobilePlan, 'Select Unlimited( emobile 500) 24 months Plus EUR54', 'Select Unlimited( emobile 500) 24 months Plus EUR54');
+		fn_AddItem(eirMobilePlan, 'Select Unlimited EUR34.50 Family & Friends', 'Select Unlimited EUR34.50 Family & Friends');
+		fn_AddItem(eirMobilePlan, '', '');
+		fn_AddItem(eirMobilePlan, 'MBB Basic', 'MBB Basic');
+		fn_AddItem(eirMobilePlan, 'eMobile MBB 10GB 12Mths', 'eMobile MBB 10GB 12Mths');
+		fn_AddItem(eirMobilePlan, '4G eMobile Broadband Medium SIMO', '4G eMobile Broadband Medium SIMO');
+		fn_AddItem(eirMobilePlan, '4G eMobile Broadband Extra Large', '4G eMobile Broadband Extra Large');
+		fn_AddItem(eirMobilePlan, '4G eMobile Broadband XXL', '4G eMobile Broadband XXL');
+
+	}
+	else if (eirMobileSystem.value == 'R6')
+	{
+		removeAllOptions(eirMobilePlan);
+
+		fn_AddItem(eirMobilePlan, '', '');
+		fn_AddItem(eirMobilePlan, 'Mobile 100 Roaming', 'Mobile 100 Roaming');
+		fn_AddItem(eirMobilePlan, 'Mobile 400 Roaming', 'Mobile 400 Roaming');
+		fn_AddItem(eirMobilePlan, 'Mobile Unlimited 15GB Roaming', 'Mobile Unlimited 15GB Roaming');
+		fn_AddItem(eirMobilePlan, 'Mobile Unlimited 30GB Roaming', 'Mobile Unlimited 30GB Roaming');
+		fn_AddItem(eirMobilePlan, 'Mobile 100 Roaming Sim Only', 'Mobile 100 Roaming Sim Only');
+		fn_AddItem(eirMobilePlan, 'Mobile 400 Roaming Sim Only', 'Mobile 400 Roaming Sim Only');
+		fn_AddItem(eirMobilePlan, 'Mobile Unlimited 15GB Roaming Sim Only', 'Mobile Unlimited 15GB Roaming Sim Only');
+		fn_AddItem(eirMobilePlan, 'Mobile Unlimited 30GB Roaming Sim Only', 'Mobile Unlimited 30GB Roaming Sim Only');
+		fn_AddItem(eirMobilePlan, '', '');
+		fn_AddItem(eirMobilePlan, 'FMS Broadband', 'FMS Broadband');
+	}
+}
+
+function fn_ChosenPlan () {
+
+	removeAllOptions(ChosenPlan);
+
+	if (eirMobileSystem.value == 'CM' && migration.value == 'No')
+	{
+		removeAllOptions(ChosenPlan);
+
+		fn_AddItem(ChosenPlan, '', '');
+		fn_AddItem(ChosenPlan, 'FMC eMobile 150', 'FMC eMobile 150');
+		fn_AddItem(ChosenPlan, 'FMC eMobile 300', 'FMC eMobile 300');
+		fn_AddItem(ChosenPlan, 'FMC eMobile 500', 'FMC eMobile 500');
+		fn_AddItem(ChosenPlan, 'FMC eMobile Unlimited & Data 18 months', 'FMC eMobile Unlimited & Data 18 months');
+		fn_AddItem(ChosenPlan, 'Select 100', 'Select 100');
+		fn_AddItem(ChosenPlan, 'Select 200', 'Select 200');
+		fn_AddItem(ChosenPlan, 'Select 300', 'Select 300');
+		fn_AddItem(ChosenPlan, 'Select 400', 'Select 400');
+		fn_AddItem(ChosenPlan, 'Select 500', 'Select 500');
+		fn_AddItem(ChosenPlan, 'Select Unlimited Talk & Text', 'Select Unlimited Talk & Text');
+		fn_AddItem(ChosenPlan, 'Select Unlimited EUR74', 'Select Unlimited EUR74');
+		fn_AddItem(ChosenPlan, 'Select Unlimited Sim Only', 'Select Unlimited Sim Only');
+		fn_AddItem(ChosenPlan, 'Select Smart 300', 'Select Smart 300');
+		fn_AddItem(ChosenPlan, 'Select Smart Unlimited', 'Select Smart Unlimited');
+		fn_AddItem(ChosenPlan, 'FMC eMobile Unlimited & Data 4G', 'FMC eMobile Unlimited & Data 4G');
+		fn_AddItem(ChosenPlan, 'FMC eMobile Unlimited & Data 4G Sim Only', 'FMC eMobile Unlimited & Data 4G Sim Only');
+		fn_AddItem(ChosenPlan, 'Select Unlimited( emobile 500) 24 months Plus EUR54', 'Select Unlimited( emobile 500) 24 months Plus EUR54');
+		fn_AddItem(ChosenPlan, 'Select Unlimited EUR34.50 Family & Friends', 'Select Unlimited EUR34.50 Family & Friends');
+		fn_AddItem(ChosenPlan, '', '');
+		fn_AddItem(ChosenPlan, 'MBB Basic', 'MBB Basic');
+		fn_AddItem(ChosenPlan, 'eMobile MBB 10GB 12Mths', 'eMobile MBB 10GB 12Mths');
+		fn_AddItem(ChosenPlan, '4G eMobile Broadband Medium SIMO', '4G eMobile Broadband Medium SIMO');
+		fn_AddItem(ChosenPlan, '4G eMobile Broadband Extra Large', '4G eMobile Broadband Extra Large');
+		fn_AddItem(ChosenPlan, '4G eMobile Broadband XXL', '4G eMobile Broadband XXL');
+
+	}
+	else if (eirMobileSystem.value == 'CM' && migration.value == 'R6 Migration')
+	{
+		removeAllOptions(ChosenPlan);
+
+		fn_AddItem(ChosenPlan, '', '');
+		fn_AddItem(ChosenPlan, 'Mobile 100 Roaming', 'Mobile 100 Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile 400 Roaming', 'Mobile 400 Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 15GB Roaming', 'Mobile Unlimited 15GB Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 30GB Roaming', 'Mobile Unlimited 30GB Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile 100 Roaming Sim Only', 'Mobile 100 Roaming Sim Only');
+		fn_AddItem(ChosenPlan, 'Mobile 400 Roaming Sim Only', 'Mobile 400 Roaming Sim Only');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 15GB Roaming Sim Only', 'Mobile Unlimited 15GB Roaming Sim Only');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 30GB Roaming Sim Only', 'Mobile Unlimited 30GB Roaming Sim Only');
+		fn_AddItem(ChosenPlan, '', '');
+		fn_AddItem(ChosenPlan, 'FMS Broadband', 'FMS Broadband');
+	}
+	else if (eirMobileSystem.value == 'R6')
+	{
+		removeAllOptions(ChosenPlan);
+
+		fn_AddItem(ChosenPlan, '', '');
+		fn_AddItem(ChosenPlan, 'Mobile 100 Roaming', 'Mobile 100 Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile 400 Roaming', 'Mobile 400 Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 10GB Roaming', 'Mobile Unlimited 10GB Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 30GB Roaming', 'Mobile Unlimited 30GB Roaming');
+		fn_AddItem(ChosenPlan, 'Mobile 100 Roaming Sim Only', 'Mobile 100 Roaming Sim Only');
+		fn_AddItem(ChosenPlan, 'Mobile 400 Roaming Sim Only', 'Mobile 400 Roaming Sim Only');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 10GB Roaming Sim Only', 'Mobile Unlimited 10GB Roaming Sim Only');
+		fn_AddItem(ChosenPlan, 'Mobile Unlimited 30GB Roaming Sim Only', 'Mobile Unlimited 30GB Roaming Sim Only');
+		fn_AddItem(ChosenPlan, '', '');
+		fn_AddItem(ChosenPlan, 'FMS Broadband', 'FMS Broadband');
+	}
+	else{
+
+		if(CurrentService.value == 'eir Mobile Broadband')
+		{
+			removeAllOptions(ChosenPlan);
+			fn_AddItem(ChosenPlan, '', '');
+			fn_AddItem(ChosenPlan, 'MBB Basic', 'MBB Basic');
+			fn_AddItem(ChosenPlan, 'MBB Medium', 'MBB Medium');
+			fn_AddItem(ChosenPlan, 'MBB XL', 'MBB XL');
+			fn_AddItem(ChosenPlan, 'MBB XXL', 'MBB XXL');
+		}
+		else
+		{
+			removeAllOptions(ChosenPlan);
+		}
+	}
+}
+
+
+
+/*******************
+LOOKUP FUNCTIONALITY
+********************/
+
+function fn_LiveSearch() {
+	if (typeof aryAjax_Settings=="undefined")
+		alert("Library did not load");
+	else {
+		var strValue = document.getElementById('strLiveSearchText').value.replace(/\s/g,'');
+		var divLiveSearch = document.getElementById('divLiveSearch');
+
+		if (strValue.length == 0) {
+			divLiveSearch.innerHTML = '';
+		}
+		else if (strValue.length < 8) {
+			divLiveSearch.innerHTML = '';
+		}
+
+		else {
+
+		aryAjax_Settings[0] = 'client_meteor'; 		//The system to use
+		aryAjax_Settings[1] = ''; 		//The automation username
+		aryAjax_Settings[2] = ''; 		//The automation users password
+		aryAjax_Settings[3] = '1158'; 			//The Id of the campaign
+		aryAjax_Settings[4] = 'strCDA_1158_field_0_4'; 	//The search field
+		aryAjax_Settings[5] = strValue + "*"; 		//The search value
+		aryAjax_Settings[13] = '-1';			//Id of the current record, used for delimiting and not repeating current case
+		aryAjax_Settings[14] = 'true';			//Click through to campaign?
+		aryAjax_Settings[15] = 'divLiveSearch';		//The id of the destination to which the table will be inserted
+		aryAjax_Settings[6] = 'intCDA_1158_Id,strCDA_1158_field_0_3,strCDA_1158_field_0_16,strCDA_1158_field_0_17,strCDA_1158_field_0_18,strCDA_1158_field_0_59,strCDA_1158_field_0_22,strCDA_1158_field_0_55,strCDA_1158_Comments,strCDA_1158_field_0_58,strCDA_1158_field_0_57';
+		aryAjax_Settings[12] = 'Id,Account Name,Service to Cease,1st Cease Reason,2nd Cease Reason,Call Outcome,Save Reason,Non Relevant Reason,Notes,Agent,Date';
+		aryAjax_Settings[16] = 'Table';			//The types of processing.  Table or Insert
+		aryAjax_Settings[17] = 'intCDA_1158_Id,strCDA_1158_field_0_3,strCDA_1158_field_0_16,strCDA_1158_field_0_17,strCDA_1158_field_0_18,strCDA_1158_field_0_59,strCDA_1158_field_0_22,strCDA_1158_field_0_55,strCDA_1158_Comments,strCDA_1158_field_0_58,strCDA_1158_field_0_57';
+
+
+		aryAjax_Settings[22] = document.getElementById('intSystemGenerated_CompanyId').value;						//Auto Login - System
+		aryAjax_Settings[23] = document.getElementById('intSystemGenerated_UserId').value;						//Auto Login - User
+		aryAjax_Settings[24] = document.getElementById('intSystemGenerated_LoginKey').value;						//Auto Login - SessionId
+
+		aryAjax_Settings[25] = "strCDA_1158_field_0_106";					//Field to get Id when button clicked
+		aryAjax_Settings[26] = "fnUpdate();";							//Function to be performed after update
+		aryAjax_Settings[27] = "strCDA_1158_field_0_106_TextDisplay";		//Field to get Description when button clicked
+
+		fn_Ajax_BE_Process();
+	}
+}
+}
+
+
+var strCDA_1158_field_0_58 = document.getElementById('strCDA_1158_field_0_58');
+var strBEDisplayed_Username = document.getElementById('strBEDisplayed_Username');
+strCDA_1158_field_0_58.value = strBEDisplayed_Username.value;
+
+var str_CurrDate = new Date();
+var str_month = str_CurrDate.getMonth() + 1;
+var str_day = str_CurrDate.getDate();
+var str_year = str_CurrDate.getFullYear();
+
+var str_Hour = str_CurrDate.getHours();
+var str_Min = str_CurrDate.getMinutes();
+var str_Sec = str_CurrDate.getSeconds();
+
+document.getElementById('strCDA_1158_field_0_57').value = str_day+'/'+str_month+'/'+str_year + ' ' + str_Hour+':'+str_Min+':'+str_Sec;
+
+var btnWeb_DeatilsstrCDA_1158_field_0_1 = document.getElementById('btnWeb_DeatilsstrCDA_1158_field_0_1');
+//btnWeb_DeatilsstrCDA_1158_field_0_1.control.style.visibility = "hidden";
+document.getElementById('btnWeb_DeatilsstrCDA_1158_field_0_1').style.display ='none';
+
+
+var strLiveSearchText = document.getElementById('strLiveSearchText');
+var accountNumber = document.getElementById('strCDA_1158_field_0_4');
+
+var accountName = document.getElementById('strCDA_1158_field_0_3');
+
+
+function fn_CopyAccountDetails()
+{
+	accountNumber.value = strLiveSearchText.value.replace(/\s/g,'');
+
+
+	var tdElem = document.getElementById('ajax_td__0_1');
+	var tdText = tdElem.innerText;
+	//accountName.value = ajax_td__0_1.value;
+}
+
+/*****************************
+CREATE SUMMARY SHEET FUNCTIONS
+******************************/
+
+
+function fn_CreateSummarySheet() {
+
+
+
+
+	var	strAccess = '';
+	var strBB = ' ';
+	var streMobile = ' ';
+	var streVision = ' ';
+	var strTech = ' ';
+	var strDD = ' ';
+	var strMigration = ' ';
+	var strCredit = ' ';
+
+	//Access Summary
+	if (CurrentService.value == 'PSTN' || CurrentService.value == 'PSTN & Broadband' || CurrentService.value == "PSTN & Broadband & eir Mobile" || CurrentService.value == "eir Talk" || CurrentService.value == "eir Talk & eir Fibre" || CurrentService.value == 'eir Talk & eir Mobile' || CurrentService.value == "eir Talk & eir Fibre & eir Vision" || CurrentService.value == "eir Talk & eir Fibre & eir Mobile" || CurrentService.value == "eir Talk & eir Fibre & eir Vision & eir Mobile")
+	{
+		strAccess = '<strong>HOME PHONE</strong><br/>With all unlimited calls, they are free for up to 1 hour. If you need to make a call over 1 hour, hang up on the 59th minute and call back, and the call will remain without charge.<br/>';
+	}
+	else
+	{
+		strAccess = ' ';
+	}
+
+	//Broadband Summary
+	if (CurrentService.value =="PSTN & Broadband" || CurrentService.value == "PSTN & Broadband & eir Mobile" || CurrentService.value == "Broadband" || CurrentService.value == "Broadband & eir Mobile" || CurrentService.value == "eir Talk & eir Fibre" || CurrentService.value == "eir Talk & eir Fibre & eir Vision" || CurrentService.value == "eir Talk & eir Fibre & eir Mobile" || CurrentService.value == "eir Talk & eir Fibre & eir Vision & eir Mobile" || CurrentService.value == "eir Fibre"  || CurrentService.value == "eir Talk & eir Fibre" || CurrentService.value == "eir Talk & eir Fibre & eir Vision" || CurrentService.value == "eir Talk & eir Fibre & eir Mobile" || CurrentService.value == "eir Talk & eir Fibre & eir Vision & eir Mobile" || CurrentService.value == "eir Fibre")
+	{
+		strBB = '<strong>BROADBAND</strong><br/>Your usage allowance is X.<i>(If broadband is capped)</i> You will be charged if you go over this allowance.<br/>';
+	}
+	else
+	{
+		strBB = '';
+	}
+
+	//eir Mobile Summary
+	if (SavePlus.value =="Save Plus eir Mobile" || SavePlus.value =="Save Plus Broadband & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Mobile" || SavePlus.value =="Save Plus eir Fibre & eir Mobile" || SavePlus.value =="Save Plus eir Fibre & eir Mobile & eir Vision" || SavePlus.value =="Save Plus eir Talk & eir Mobile & eir Vision"  || SavePlus.value =="Save Plus eir Talk & eir Mobile")
+	{
+		streMobile = "<br/><strong>MOBILE</strong><br/><strong>Mobile ProRata Allowance</strong><br/> As you are beginning your mobile contract in the middle of your billing cycle you will not receive a full monthly allowance of calls, texts & inclusive data between now and your first billing date. You will be pro rated for this period and your full monthly allowance will start from your next billing date. You can check your remaining allowance at any time by texting 'balance' to 50104 for your minutes or 'Data' for your data allowance.<br/><br/><strong>Delivery</strong> <br/>Your delivery will be within the next 48 hours. You will get an email and a text message from Nightline deliveries (our delivery provider) to let you know when it's on route.<br/>You will need to provide the below to the delivery person:<ul><li> Photo ID: valid passport, drivers licence or EU national identity card, this must be in the same name as your eir account.</li><li>You must accept the delivery yourself, someone else cannot show your ID on your behalf.</li></ul><br/> ";
+	}
+	else
+	{
+		streMobile = '';
+	}
+
+
+	//eir Vision Summary
+	if (SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Talk & eir Vision" || SavePlus.value =="Save Plus eir Fibre & eir Vision" || SavePlus.value =="Save Plus eir Fibre & eir Mobile & eir Vision" || SavePlus.value =="Save Plus eir Vision" || SavePlus.value == "Save Plus eir Mobile & eir Vision" || SavePlus.value =="Save Plus eir Talk & eir Mobile & eir Vision")
+	{
+		streVision = '<br/><strong>TV</strong><br/><strong>eir vision Terms and Conditions for residential (i.e. non-commercial) usage only</strong><br/>A complete list of channels on eir Vision is available on eir.ie/tv.  eir Vision is for residential use only and for use at the your (the subscriber) address only.<br/><br/><strong>Self Declaration</strong><br/>Can you confirm that you agree to use eir Vision for home-use only and that you will not use it in a communal viewing area, public area, or in public commercial premises even if no charge is made to the general public?<i>(Customer must answer "Yes" for sale to continue)</i>. ';
+	}
+	else
+	{
+		streVision = '';
+	}
+
+
+	//Tech Install Summary
+	if ((SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Talk & eir Vision" || SavePlus.value =="Save Plus eir Fibre & eir Vision" || SavePlus.value =="Save Plus eir Fibre & eir Mobile & eir Vision" || SavePlus.value =="Save Plus eir Vision" || SavePlus.value == "Save Plus eir Mobile & eir Vision" || SavePlus.value =="Save Plus eir Talk & eir Mobile & eir Vision")
+
+	|| (SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Fibre & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Vision" || SavePlus.value =="Save Plus NGA Migration & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Talk & eir Vision & eir Mobile" || SavePlus.value =="Save Plus NGA Migration & eir Talk & eir Vision")
+
+	|| (SavePlus.value == "Save Plus eir Fibre" || SavePlus.value == "Save Plus eir Fibre & eir Vision" || SavePlus.value == "Save Plus eir Fibre & eir Mobile" || SavePlus.value == "Save Plus eir Fibre & eir Mobile & eir Vision"))
+	{
+		strTech = '<br><strong>TECH INSTALL APPOINTMENT</strong><br/>If the appointment date we discussed is not available we will contact you to let you know and arrange a new date.<ul><li> You will receive a reminder SMS the day before your appointment.</li><li>When the technician visits your home he/she will assess the work that needs to be done to install service and will let you know of the exact level of work required.</li></ul>';
+	}
+	else
+	{
+		strTech = '';
+	}
+
+
+	//Migration Summary
+	if (migration.value == 'R6 Migration')
+	{
+		strMigration = "<strong>R6 MIGRATION</strong><br/>As you have upgraded your bundle we will send you a closing bill for your old account number shortly. The balance on this bill will be 'zero' as the outstanding credits and charges will be transferred to your new account. This first bill for  your new account will also include a pro-rated charge for the time you moved bundle to your new billing date. For this reason this first bill may be higher than your usual monthly bills. From now on you will receive a bill every month.<br/>";
+	}
+	else if (migration.value != 'R6 Migration' && CallOutcome.value == 'Save Plus')
+	{
+		strMigration = "Your first bill for your new bundle will be a little different to your future bills as it includes:<ul><li>Your bundle price billed in advance for next month, along with any out of bundle costs for services you used since your service was connected, plus </li><li>The charge from the date your service is connected to the date your first bill is issued. This will be called a 'part-period charge' on your bill.</li></ul>You will receive a bill every month. Login to My eir or review your bill for an itemised breakdown.";
+	}
+	else{
+		strMigration.value == '';
+	}
+
+
+    //CreditInsights
+	if (migration.value == '')
+	{
+		strCredit = '<p><strong>CREDIT INSIGHTS</strong><br/>I understand and agree that if I do not pay my bills in full and on time, information on my payment performance may be shared with other service providers through a database operated by the providers called Credit Insights.  Other service providers may check Credit Insights when assessing my credit worthiness if I apply for their services in the future I understand that this is a condition of my service contract. I acknowledge that further information is available in the eir privacy statement.</p>';
+	}
+	else{
+		strCredit.value == '';
+	}
+
+
+	document.getElementById("pstrAccess").innerHTML = strAccess;
+
+	document.getElementById('pstreMobile').innerHTML = streMobile;
+
+    document.getElementById("pstreVision").innerHTML = streVision;
+
+	document.getElementById("pstrTech").innerHTML = strTech;
+
+	document.getElementById("pstrMigration").innerHTML = strMigration;
+
+	document.getElementById("pstrCredit").innerHTML = strCredit;
+
+}
+function fn_AllnOne_Hide_Selection1(){
+	document.getElementById('divMessage').style.display ='none';
+	document.getElementById('divMessageeirMobileUpgrade').style.display ='none';
+	document.getElementById('divBackground').style.display ='none';
+}
+function fn_Show_Selection1(){
+
+	document.getElementById('divBackground').style.display ='inline';
+
+	if (SaveReason2.value == 'Mobile upgrade' || typeofUpgradeCall.value == 'eir Mobile Upgrade') {
+		document.getElementById('divMessageeirMobileUpgrade').style.display ='inline';
+	}
+	else {
+		document.getElementById('divMessage').style.display ='inline';
+	}
+}
+
+function fn_Confirmed(){
+	strContact_Outcome.length = 0;
+	strContact_Outcome.options[strContact_Outcome.length] = new Option('','');
+
+	if (CallOutcome.value =="Save Recontract")
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Save Recontract', 'SAVE: Save Recontract');
+	}
+	else if (CallOutcome.value =="Save Plus")
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Save Plus', 'SAVE: Save Plus');
+	}
+	else if (CallOutcome.value =="Partial Save")
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Partial Save', 'SAVE: Partial Save');
+	}
+	else if (CallOutcome.value =="Product Cease")
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Product Cease', 'CEASE: Product Cease');
+	}
+	else if(typeofUpgradeCall.value == 'eir Mobile Upgrade')
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('MOBILE UPGRADE: Sale', 'MOBILE UPGRADE: Sale');
+	}
+	else if(ceaseOrNot.value == 'Relevant Non Cease Call')
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Relevant Non Cease', 'Relevant Non Cease');
+	}
+	else if(typeOfCall.value == 'Non Relevant')
+	{
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Non Relevant', 'Non Relevant');
+	}
+}
+function fn_Cancelled(){
+
+	strContact_Outcome.length = 0;
+}
+
+
+//SWITCHER SCRIPT
+function fn_AllnOne_Hide_Selection2(){
+	document.getElementById('divSwitchMessage').style.display ='none';
+	document.getElementById('divSwitchBackground').style.display ='none';
+}
+function fn_Show_Selection2(){
+	document.getElementById('divSwitchMessage').style.display ='inline';
+	document.getElementById('divSwitchBackground').style.display ='inline';
+}
+function fn_YesDiscuss(){
+
+	fn_showQ(59);
+	fn_showQ(17);
+	fn_showQ(18);
+	fn_showQ(20);
+	fn_showQ(62);
+
+}
+function fn_NoDiscuss(){
+
+  strContact_Outcome.length = 0;
+  strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Switcher (Does not want to discuss options)', 'CEASE: Switcher (Does not want to discuss options)');
+
+}
+
+//SAVE PROMO GUIDE
+function fn_AllnOne_Hide_Selection3(){
+	document.getElementById('divPromoSaveGuideMessage').style.display ='none';
+	document.getElementById('divPromoSaveGuideBackground').style.display ='none';
+}
+function fn_Show_Selection3(){
+	document.getElementById('divPromoSaveGuideMessage').style.display ='inline';
+	document.getElementById('divPromoSaveGuideBackground').style.display ='inline';
+}
+
+
+function fn_CreateSavePromoGuide() {
+
+	var strOfferPromo = '';
+	var arr_Promos = {};
+	var promo;
+	//VO customer
+	if (CurrentService.value =='PSTN' || CurrentService.value == 'eir Talk' || CurrentService.value == 'eir Talk & eir Mobile'){
+
+		document.getElementById("divFibreMigration").style.display = 'none';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months (R6)':12,
+			'Promotion - 10 Euro off for 4 months (R6)':12,
+			'Promotion - 5 Euro off for 4 months (TIS)':12
+		};
+	}
+
+	//Standalone NGB customer
+	else if (CurrentService.value =='Broadband'  || CurrentService.value =='Broadband & eir Mobile'){
+
+		strAddBroadband = '';
+		arr_Promos = {
+			'Promotion - 3 Euro off for 12 months': 12 ,
+			'Promotion - 5 Euro off for 18 months': 18 ,
+			'25 euro Cash back': 'last resort 12'
+		};
+
+	}
+
+	//Standalone NGA customer
+	else if (CurrentService.value =='eir Fibre' || CurrentService.value =='eir Fibre & eir Mobile' || CurrentService.value =='eir Fibre & eir Vision'){
+		strAddBroadband = '';
+		arr_Promos = {
+			'Promotion - 3 Euro off for 12 months': 12 ,
+			'Promotion - 5 Euro off for 18 months': 18
+		};
+	}
+	//NGA customer Dual Play
+	else if (CurrentService.value =='eir Talk & eir Fibre'){
+		strAddBroadband = '';
+		strFibreMigration = '';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months': 6 ,
+			'Promotion - 10 Euro off for 4 months': 12 ,
+			'Promotion - 5 Euro off for 12 months': 12 ,
+			'Promotion - 10 Euro off for 9 months': 18 ,
+			'Promotion - 8 Euro off for 12 months': 12 ,
+			'50 Euro Cashback offer': 'see rules 12/18'
+		};
+	}
+
+	//NGB DualPlay customer
+	else if (CurrentService.value =='PSTN & Broadband'){
+		document.getElementById("divAddBroadband").style.display = 'none';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months': 6 ,
+			'Promotion - 10 Euro off for 4months': 12 ,
+			'Promotion - 5 Euro off for 12 months': 12 ,
+			'Promotion - 7 Euro off for 12 months': 12 ,
+			'Promotion - 12.50  Euro off for 12 months': '12/18',
+			'â‚¬50/â‚¬100 Cashback Offer':'see rules, 12/18'
+		};
+	}
+	//NGA customer Triple Play Mobile
+	else if (CurrentService.value =='eir Talk & eir Fibre & eir Mobile'){
+		strAddBroadband = '';
+		strFibreMigration = '';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months': 6 ,
+			'Promotion - 10 Euro off for 4 months': 12 ,
+			'Promotion - 5 Euro off for 12 months': 12 ,
+			'Promotion - 8 Euro off for 12 months': 12 ,
+			'Promotion - 50/100 Euro Cashback offer': 'see rules 12/18'
+		};
+	}
+	//NGB customer Triple Play Mobile
+	else if (CurrentService.value =='PSTN & Broadband & eir Mobile'){
+		strAddBroadband = '';
+		strFibreMigration = '';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months': 6 ,
+			'Promotion - 10 Euro off for 4 months': 12 ,
+			'Promotion - 5 Euro off for 12 months': 12 ,
+			'Promotion - 7 Euro off for 12 months': 12 ,
+			'Promotion - 12.50 Euro off for 12 months': '12/18',
+			'Promotion - 50/100 Euro Cashback offer': 'see rules 12/18'
+		};
+	}
+	//NGA customer Triple Play TV
+	else if (CurrentService.value =='eir Talk & eir Fibre & eir Vision'){
+		strAddBroadband = '';
+		strFibreMigration = '';
+		strAddeirVision = '';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months': 6 ,
+			'Promotion - 10 Euro off for 4 months': 12 ,
+			'Promotion - 5 Euro off for 12 months': 12 ,
+			'Promotion - 10 Euro off for 9 months': 18 ,
+			'Promotion - 8 Euro off for 12 months': 12 ,
+			'Promotion - 50/100 Euro Cashback offer': 'see rules 12/18'
+		};
+	}
+
+	//Quad Play
+	else if (CurrentService.value =='eir Talk & eir Fibre & eir Vision & eir Mobile' || CurrentService.value =='eir Fibre & eir Vision & eir Mobile'){
+		strAddBroadband = '';
+		strFibreMigration = '';
+		strAddeirVision = '';
+		arr_Promos = {
+			'Promotion - 5 Euro off for 4 months': 6 ,
+			'Promotion - 10 Euro off for 4 months': 12 ,
+			'Promotion - 5 Euro off for 12 months': 12 ,
+			'Promotion - 10 Euro off for 9 months': 18 ,
+			'Promotion - 8 Euro off for 12 months': 12 ,
+			'Promotion - 50/100 Euro Cashback offer': 'see rules 12/18'
+		};
+	}
+
+	//eir Mobile
+	else if (CurrentService.value =='eir Talk & eir Fibre & eir Vision & eir Mobile' || CurrentService.value =='eir Fibre & eir Vision & eir Mobile'){
+		strAddBroadband = '';
+		strFibreMigration = '';
+		strOfferPromo = 'Promos available:<br/>1. ??? <i>(6 month)</i><br/>2. ??? <i>(12 month)</i><br/>3. ??? <i>(12 month)</i><br/>4. ??? <i>(18 month)</i><br/>5. ??? <i>(12/18month)</i><br/>6. $25/â‚¬50/â‚¬100 Cashback Offer <i>(Check rules in Cashback Process brief)</i><br/>';
+	}
+	else {
+
+		var strAddBroadband = '';
+		var strFibreMigration = '';
+		var strAddeirVision = '';
+		var strAddeirMobile = '';
+		var strDowngradeTalkPlan = '';
+		var strOfferPromoHeading = '';
+		var strOfferPromo = '';
+	}
+
+
+	if(/PSTN|eir Talk/.test(CurrentService.value))$JQ("#divLandlineFB").show();
+	else $JQ("#divLandlineFB").hide();
+
+	if(/Broadband/.test(CurrentService.value)) $JQ("#divFibreMigration").show();
+	else $JQ("#divFibreMigration").hide();
+
+	if(/Broadband|eir Fibre/.test(CurrentService.value)){
+		$JQ("#divBroadbandFB").show();
+		$JQ("#divAddBroadband").hide();
+	}
+	else{
+		$JQ("#divBroadbandFB").hide();
+		$JQ("#divAddBroadband").show();
+	}
+
+	if(/eir Vision/.test(CurrentService.value)){
+		$JQ("#diveirVisionFB").show();
+		$JQ("#divAddeirVision").hide();
+	}
+	else {
+		$JQ("#diveirVisionFB").hide();
+		$JQ("#divAddeirVision").show();
+	}
+
+	if(/eir Mobile/.test(CurrentService.value))$JQ("#diveirMobileFB").show();
+	else $JQ("#diveirMobileFB").hide();
+
+	strOfferPromo = 'Promos available:<ol>';
+	for(promo in arr_Promos)
+		strOfferPromo += '<li>'+promo+'<i> ('+arr_Promos[promo]+' months contract)</i></li>';
+	strOfferPromo += '</ol>';
+	document.getElementById("divOfferPromo").innerHTML = strOfferPromo;
+
+
+}
+
+
+
+
+
+
+
+/***************
+QUESTIONS JS CODE
+****************/
+
+// strCDA_1158_field_0_11 - Campaign ID:
+fn_getField(11).onchange = function(){
+
+	var CampaignID = new Array('abstest','Churn_Recontracting_HPC','MANUALCALL','OBCALLBACK','EIRMOBCAMP','CHARIOT1XF','CHARIOTFPN','CSS2TSSNEW','TVAD2015BB','LOOSEBUNDL','Eircom_PSTN_Trial_Line','ARDINBOUND','TVSAVE01XF','HCL_Voice_Only_HPC','RETCOMMS16','RETON14DAY','PRICEINCRL','PRICEINCR6','1901IVROPT','TVBBINEVEN','ONLINESALE','PSTN190111','EMOBILEWEB','EMOBILEBTL','WINBARURAL','EFIBRLOCAL','TVBBTIMDAY','WINBANGB3P','WINBNGA4P2','PSTNINBOUN','VBUPDOWN01','EMOBILEUPG','WINBNGA4P1','PRESSINSR9','SDRWINI500','WINBUNDDM1','SBANNERAD1','CGRCCL1001','NGAFREENOV','RADIOADBB','PRESSDISP7','PRESSDISP1','BBINBUNDLE','PRESSINSR2','EVISIONATL','SAVEWINCEA','PRESSDISP5','PRESSINSR7','EVISIONONL','PRESSINSR5','PRESSDISP2','EMOBETHNIC','SDRWINI215','PRESSINSR1','PRESSINSR6','EVISIONATL','PRESSDISP8','PSTNDART02','PSTNONLINE','FIBRONLIN2','PRESSDISP3','PRESSINSR8','EMOBILEATL','EMOBUNLM24','PRESSDISP4','EMOBILE150','PSTNGNPFOT','PRESSDISP6','PRESSINSR3','EMUNLOCKIN','PRESSDISP9','EVISIONDMS','EMOBRAINPR','EMOBRETURN','SAVFOTSCEA','TSSFIBPRES','EMOBADDSUB','NGANEWNEW1','TSSWLRFIBR','NONINTERIN','WINBACK011','PRESSINSR4','PRESSDIS10','FIBRONLIN1','EMOBLOWRIS','EMOBVOOUTC','NGAWINBACK','EMOBUNLM24','EMOBICLICK','FMCPRESSCA','WINBACEAMP','EMOBILSAVE','EMOBVOCROS','EMOBSIMO24','SAVESABB01','ACCESFIBXF','FIBUPGRDXF','TVSALES1XF','EMOBSALEXF','EMOBONLIXF','EMOBUPGRXF','MOVORDERXF','BBSALES1XF','ACCSALESXF','TSSWINB1XF','SAVCSSCKXF','SAVCSSGAXF','SAVCSSDUXF','SAVEHCL1XF','SAVETSS1XF','SAVFIBREXF','SAVEBUNDLE','FIBRETV1XF','TVADBUND15','BBFRETRIAL','TSSBBNGBSS','TSSBBRURAL','TSSEFIBRE1','Eircom_TSS_Price_Change_R6_XF','Eircom_Customer_Connect','BUSIVRRESD','REWARDCAMP','quality','Eircom_CIS_Webmail_Reset','Eircom_CIS_Modem_Compromise_XF_SIP');
+
+
+	if (CampaignID.indexOf (this.value) == -1){
+		alert('Campaign ID is not correct');
+		this.value ='';
+	}
+	else {
+
+	}
+
+
+	if (this.value == 'abstest')
+	{
+		fn_showQuestions(94,95);
+	}
+
+	if (this.value == 'quality'){
+		fn_showQuestions(1, 114);
+		for (i = 0; i <= 114; i++)
+		{
+			strObj2 = document.getElementById(strTable + i);
+			strObj = document.getElementById(str + i);
+
+			if (strObj2.style.display == 'none') { }
+			else
+			{
+				if(strObj.type == 'text' || strObj.type == 'select-one' || strObj.type == 'select-multiple ')
+				{
+					if (strObj.value == '')
+					{
+						strObj2.style.display = 'none';
+					}
+				}
+			}
+		}
+	}
+
+	if (this.value == 'Eircom_CIS_Webmail_Reset')
+	{
+		fn_hideQuestions(0,10);
+		fn_hideQuestions(12,114);
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Contact Complete', 'Contact Complete');
+	}
+
+	if (this.value == 'Churn_Recontracting_HPC')
+	{
+		fn_AddItem(typeOfCall, 'No answer', 'No answer');
+		fn_AddItem(typeOfCall, 'Account holder not available to speak', 'Account holder not available to speak');
+	}
+
+
+
+}
+// Field [ strCDA_1158_field_0_4 ] Mapped to [ Customer Account Number: ]
+fn_getField(4).onchange = function(){
+	if(!!this.value)AccountNumberCheck(4);
+}
+// Field [ strCDA_1158_field_0_5 ] Mapped to [ Customer Phone Number: ]
+fn_getField(5).onchange = function(){
+	if(!!this.value)PhoneNumberCheck(5);
+}
+// Field [ strCDA_1158_field_0_6 ] Mapped to [ Customer Mobile Number: ]
+fn_getField(6).onchange = function(){
+	if(!!this.value)PhoneNumberCheck(6);
+}
+// Field [ strCDA_1158_field_0_73 ] Mapped to [ Customer Type: ]
+fn_getField(73).onchange = function(){
+	fn_hideQBelow(this,[]);
+	fn_showQ(9);
+	fn_showQ(10);
+	fn_showQ(13);
+	fn_LifeStage();
+	fn_AllLogics();
+
+}
+// Field [ strCDA_1158_field_0_9 ] Mapped to [ Current Services: ]
+fn_getField(9).onchange = function(){
+
+	fn_hideQBelow(this,[]);
+	fn_showQ(10);
+	fn_showQ(13);
+
+	fn_ServiceToCeaseList ();
+	fn_SavePlusList ();
+	fn_NonRelevantSale ();
+
+	pstn_pattern = /pstn/i;
+	talk_pattern = /talk/i;
+	bb_pattern = /broadband/i;
+	fibre_pattern = /fibre/i;
+	mobile_pattern = /mobile/i;
+
+
+	fn_condShowHide(!(/^(broadband|eir fibre)$/i.test(this.value)),[5]);
+	fn_condShowHide(mobile_pattern.test(this.value),[36,37]);
+	fn_AllLogics();
+
+
+	if (campaignID.value =='abstest'){
+		fn_showQuestions(94,95);
+	}
+
+}
+// Field [ strCDA_1158_field_0_36 ] Mapped to [ eir Mobile System: ]
+fn_getField(36).onchange = function(){
+	fn_ChosenPlan();
+	fn_eirMobilePlan ();
+	fn_AddMobileUpgradeValue();
+}
+// Field [ strCDA_1158_field_0_13 ] Mapped to [ Type of Call: ]
+fn_getField(13).onchange = function(){
+
+	fn_hideQBelow(this,[]);
+
+	strContact_Outcome.length = 0;
+
+	fn_condShowHide(this.value == 'Mobile Upgrade', [74,75]);
+	fn_condShowHide(this.value == 'Non Relevant', [52,55]);
+	fn_condShowHide(this.value == 'Save', [0,14]);
+
+
+	if (this.value == 'Non Relevant'){
+		fn_showQArr([52,55]);
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Non Relevant', 'Non Relevant');
+
+		var str_TransferIDs = 'TVSAVE01XF[SEP]ACCESFIBXF[SEP]FIBUPGRDXF[SEP]TVSALES1XF[SEP]EMOBSALEXF[SEP]EMOBONLIXF[SEP]EMOBUPGRXF[SEP]MOVORDERXF[SEP]BBSALES1XF[SEP]ACCSALESXF[SEP]TSSWINB1XF[SEP]SAVCSSCKXF[SEP]SAVCSSGAXF[SEP]SAVCSSDUXF[SEP]SAVEHCL1XF[SEP]SAVETSS1XF[SEP]SAVFIBREXF[SEP]FIBRETV1XF[SEP]Eircom_TSS_Price_Change_R6_XF';
+		fn_condShowHide(!!campaignID.value && str_TransferIDs.indexOf(campaignID.value)!=-1,[96]);
+		fn_condShowHide(/(PSTN|Broadband)/i.test(CurrentService.value) || (/(eir Mobile)/i.test(CurrentService.value) && eirMobileSystem.value == "CM"),[81]);
+
+
+
+	}
+	else fn_hideQArr([52,55]);
+
+	if (this.value == 'Dead Call'){
+
+		fn_hideQuestions(2,9);
+		fn_hideQuestions(36,37);
+		fn_hideQ(73);
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Dead Call', 'Dead Call');
+	}
+	else if (this.value == "No answer" || this.value == "Account holder not available to speak"){
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Outbound No Contact', 'Outbound No Contact');
+		fn_hideQuestions(2,3);
+		fn_hideQuestions(5,7);
+		fn_hideQ(73);
+		fn_hideQ(9);
+	}
+
+	else{
+		fn_showQuestions(2,7);
+		fn_showQ(73);
+		fn_showQ(9);
+
+	}
+
+	fn_AllLogics();
+}
+
+// Field [ strCDA_1158_field_0_55 ] Mapped to [ Non Relevant Reason: ]
+fn_getField(55).onchange = function(){
+	if (this.value == 'Non customer') {
+
+	fn_hideQuestions(2, 7);
+	fn_hideQ(9);
+	}
+
+	else{
+	fn_showQuestions(8, 7);
+	fn_showQ(9);
+	}
+}
+
+// Field [ strCDA_1158_field_0_14 ] Mapped to [ Type of Save Call: ]
+fn_getField(14).onchange = function(){
+
+	fn_hideQBelow(this,[]);
+
+	strContact_Outcome.length = 0;
+
+
+	if (custType.value =='Pre Install' || CurrentService.value =='eir Mobile')
+	{
+		fn_condShowHide(this.value == 'Yes',[16,17,18,20,59,62]);
+	}
+	else
+	{
+		fn_condShowHide(this.value == 'Yes',[64]);
+	}
+
+	fn_condShowHide(this.value == 'Relevant Non Cease Call',[31,52]);
+
+
+	if (this.value == 'Relevant Non Cease Call') {
+
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('Relevant Non Cease', 'Relevant Non Cease');
+		fn_condShowHide(/(PSTN|Broadband)/i.test(CurrentService.value) || (/(eir Mobile)/i.test(CurrentService.value) && eirMobileSystem.value == "CM"),[81]);
+
+	}
+
+	fn_AllLogics();
+}
+// Field [ strCDA_1158_field_0_31 ] Mapped to [ Relevant Non Cease Reason: ]
+fn_getField(31).onchange = function(){
+	if (this.value == 'Mobile exchange / return')
+{
+	fn_showQ(25);
+}
+ else
+{
+	fn_hideQ(25);
+
+}
+
+if (this.value == 'Loose bundle query') {
+fn_showQ(81);
+}
+else{
+fn_hideQ(81);
+}
+
+if (this.value =='Cease link email resend') {
+	ceaseOutcomeLink1email();
+}
+else{
+	ceaseOutcomeLink3Blank();
+}
+
+}
+// Field [ strCDA_1158_field_0_64 ] Mapped to [ Does customer wish to cease or switch? ]
+fn_getField(64).onchange = function(){
+
+	fn_hideQBelow(this,[]);
+
+	if (this.value == 'Cease')
+	{
+		fn_showQuestions(16,18)
+		fn_showQ(20);
+		fn_showQ(59);
+		fn_showQ(62);
+	}
+	else if (this.value == 'Switch' && custType.value == 'Existing')
+	{
+		fn_showQ(65);
+	}
+	else if (this.value == 'Switch' && custType.value == 'Cooling Off Period')
+	{
+		fn_showQuestions(16,18)
+		fn_showQ(20);
+		fn_showQ(59);
+		fn_showQ(62);
+	}
+
+	fn_AllLogics();
+}
+// Field [ strCDA_1158_field_0_65 ] Mapped to [ Is customer out of contract? ]
+fn_getField(65).onchange = function(){
+
+
+	fn_hideQBelow(this,[]);
+	fn_showQ(16);
+	fn_condShowHide(this.value == 'Yes', [66]);
+	fn_condShowHide(this.value == 'No', [17,18,20,59,62]);
+
+	if (this.value=='Yes')
+	{
+		fn_showQ(61);
+		fn_Show_Selection2();
+	}
+	fn_AllLogics();
+
+}
+// Field [ strCDA_1158_field_0_16 ] Mapped to [ What service does the customer want to cease? ]
+fn_getField(16).onchange = function(){
+
+	if (ceaseOrSwitch.value !== 'Switch'){
+		fn_hideQBelow(this,[]);
+		fn_showQ(17);
+		fn_showQ(18);
+		fn_showQ(20);
+		fn_showQ(59);
+		fn_showQ(62);
+	}
+	fn_AllLogics();
+
+	fn_LifeStage();
+
+}
+// Field [ strCDA_1158_field_0_67 ] Mapped to [ Did you read out the mandatory script? ]
+fn_getField(67).onchange = function(){
+	if (this.value == 'Yes') {
+  document.getElementById('tableid_68').style.display = 'inline';
+}
+else if (this.value == 'No') {
+  document.getElementById('tableid_68').style.display = 'inline';
+}
+}
+/* Field [ strCDA_1158_field_0_68 ] Mapped to [ Does the customer with to discuss Save options? ]
+fn_getField(68).onchange = function(){
+	//fn_ChangeList_CeaseDetails_Leve0To1();
+ document.getElementById('tableid_59').style.display = 'inline';
+
+ /*
+ 	fn_hideQBelow(this,[]);
+	fn_showQ(16);
+	fn_condShowHide(this.value == 'Yes', [17,18,20,62]);
+*/
+/*
+if (this.value == 'Yes') {
+  document.getElementById('tableid_31').style.display = 'none';
+  document.getElementById('tableid_17').style.display = 'inline';
+  document.getElementById('tableid_18').style.display = 'inline';
+  document.getElementById('tableid_20').style.display = 'inline';
+  document.getElementById('tableid_21').style.display = 'none';
+  document.getElementById('tableid_22').style.display = 'none';
+  document.getElementById('tableid_23').style.display = 'none';
+  document.getElementById('tableid_24').style.display = 'none';
+  document.getElementById('tableid_26').style.display = 'none';
+  document.getElementById('tableid_27').style.display = 'none';
+  document.getElementById('tableid_28').style.display = 'none';
+  document.getElementById('tableid_62').style.display = 'inline';
+
+}
+else if (this.value == 'No') {
+  document.getElementById('tableid_31').style.display = 'none';
+  document.getElementById('tableid_17').style.display = 'none';
+  document.getElementById('tableid_18').style.display = 'none';
+  document.getElementById('tableid_20').style.display = 'none';
+  document.getElementById('tableid_21').style.display = 'none';
+  document.getElementById('tableid_22').style.display = 'none';
+  document.getElementById('tableid_23').style.display = 'none';
+  document.getElementById('tableid_24').style.display = 'none';
+  document.getElementById('tableid_26').style.display = 'none';
+  document.getElementById('tableid_27').style.display = 'none';
+  document.getElementById('tableid_28').style.display = 'none';
+  document.getElementById('tableid_59').style.display = 'none';
+  document.getElementById('tableid_62').style.display = 'none';
+  strContact_Outcome.length = 0;
+  strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Switcher (Does not want to discuss options)', 'CEASE: Switcher (Does not want to discuss options)');
+
+}
+}*/
+// Field [ strCDA_1158_field_0_62 ] Mapped to [ Life stage of services being ceased ]
+fn_getField(62).onchange = function(){
+
+fn_TypeOfCease();
+fn_CeaseType();
+fn_1stCeaseReasonList ();
+
+
+fn_hideQBelow(this,[]);
+fn_showQ(17);
+fn_showQ(18);
+fn_showQ(20);
+fn_showQ(59);
+
+	fn_AllLogics();
+/*if (this.value == 'Yes')
+{
+	fn_ChangeList_lifeStage ();
+}
+else if (this.value == 'No'){
+	fn_ChangeList_CeaseDetails_Leve0To1();
+}	*/
+}
+// Field [ strCDA_1158_field_0_17 ] Mapped to [ 1st Cease Reason: ]
+fn_getField(17).onchange = function(){
+	fn_2ndCeaseReasonList ();
+	fn_TypeOfCease();
+
+
+
+	/*
+	if (this.value == 'Misinformed by agent') {
+
+		document.getElementById('tableid_25').style.display = 'inline';
+
+	}
+
+	else{
+
+		document.getElementById('tableid_25').style.display = 'none';
+	}*/
+
+
+
+}
+// Field [ strCDA_1158_field_0_18 ] Mapped to [ 2nd Cease Reason: ]
+fn_getField(18).onchange = function(){
+fn_TypeOfCease();
+}
+// Field [ strCDA_1158_field_0_59 ] Mapped to [ Call Outcome: ]
+fn_getField(59).onchange = function(){
+
+fn_1stSaveReasonList();
+fn_TypeOfCease();
+fn_hideQBelow(this, []);
+
+strContact_Outcome.length = 0;
+fn_condShowHide(/save/i.test(this.value)&& TV_pattern.test(CurrentService.value),[51,72]);
+fn_condShowHide(/save/i.test(this.value)&& (bb_pattern.test(CurrentService.value) || fibre_pattern.test(CurrentService.value)),[51,82]);
+
+if (this.value == 'Save Plus') {
+	fn_showQArr([8,22,23,50,42,43,51,109]);
+	////strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	//strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Save Plus', 'SAVE: Save Plus');
+	if (ServiceToCease.value=='eir Mobile Broadband'){
+		strContact_Outcome.length = 0;
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Mobile Broadband', 'SAVE: Mobile Broadband');
+	}
+}
+else if (this.value == 'Product Cease')
+{
+	fn_showQArr([26,52]);
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Product Cease', 'CEASE: Product Cease');
+
+
+	if (ServiceToCease.value=='eir Mobile Broadband'){
+		strContact_Outcome.length = 0;
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Mobile Broadband', 'CEASE: Mobile Broadband');
+	}
+
+}
+
+else if (this.value == 'Save Recontract')
+{
+fn_showQArr([22,23,85,50,42,43,109]);
+
+	////strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	//strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Save Recontract', 'SAVE: Save Recontract');
+
+	if (ServiceToCease.value=='eir Mobile Broadband'){
+		strContact_Outcome.length = 0;
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Mobile Broadband', 'SAVE: Mobile Broadband');
+	}
+}
+
+else if (this.value == 'Standard Save')
+{
+	fn_condShowHide(bb_pattern.test(CurrentService.value) || fibre_pattern.test(CurrentService.value),[82]);
+
+	fn_showQArr([22,23,85,50]);
+
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Standard Save', 'SAVE: Standard Save');
+
+	if (ServiceToCease.value=='eir Mobile Broadband'){
+
+		strContact_Outcome.length = 0;
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Mobile Broadband', 'SAVE: Mobile Broadband');
+	}
+
+}
+
+else if (this.value == 'Partial Save')
+{
+
+fn_showQArr([22,23,26,60,50,51,52,72]);
+	//fn_showQ(29);
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Partial Save', 'SAVE: Partial Save');
+
+	fn_PartialSaveLogic();
+
+
+	if (ServiceToCease.value=='eir Mobile Broadband'){
+
+		strContact_Outcome.length = 0;
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('SAVE: Mobile Broadband', 'SAVE: Mobile Broadband');
+	}
+
+
+}
+else if (this.value == 'Account Cease') {
+	fn_showQArr([26]);
+
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Account Cease', 'CEASE: Account Cease');
+
+	if (ServiceToCease.value=='eir Mobile Broadband'){
+		strContact_Outcome.length = 0;
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('CEASE: Mobile Broadband', 'CEASE: Mobile Broadband');
+	}
+
+}
+
+else if (this.value == 'Call Back Required') {
+	fn_showQArr([107, 83, 110]);
+		//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+	strContact_Outcome.options[strContact_Outcome.length] = new Option('Call Back Required', 'Call Back Required');
+
+}
+
+fn_condShowHide(/mobile/i.test(ServiceToCease.value)&& (lifeStage.value=='Cooling Off Period' || lifeStage.value=='Pre Install') && (this.value=='Account Cease' || this.value=='Partial Save' || this.value=='Product Cease'), [25]);
+
+if ((eirMobileSystem.value == 'CM' || CurrentService.value =='PSTN' || CurrentService.value =='PSTN & Broadband' || CurrentService.value =='PSTN & Broadband & eir Mobile' || CurrentService.value =='Broadband' || CurrentService.value =='Broadband & eir Mobile') && (this.value=='Save Plus' || this.value=='Partial Save' || this.value=='Standard Save' || this.value=='Save Recontract' || this.value=='Product Cease'))
+{
+	fn_showQ(81);
+}
+ else
+{
+	fn_hideQ(81);
+}
+
+fn_AllLogics();
+
+}
+
+// Field [ strCDA_1158_field_0_60 ] Mapped to [ Partial Save Outcome: ]
+fn_getField(60).onchange = function(){
+	fn_AllLogics();
+	fn_TypeOfCease();
+}
+
+// Field [ strCDA_1158_field_0_107 ] Mapped to [ Call Back Required Outcome: ]
+fn_getField(107).onchange = function(){
+
+	if (this.value == 'Customer thinking about it'){
+		fn_showQ(83);
+		fn_showQ(110);
+	}
+	else{
+		fn_hideQ(83);
+		fn_hideQ(110);
+	}
+}
+// Field [ strCDA_1158_field_0_8 ] Mapped to [ Save Plus Outcome: ]
+fn_getField(8).onchange = function(){
+	pstn_pattern = /pstn/i;
+	talk_pattern = /talk/i;
+	bb_pattern = /broadband/i;
+	fibre_pattern = /fibre/i;
+	mobile_pattern = /mobile/i;
+
+	if(bb_pattern.test(this.value) || fibre_pattern.test(this.value)){fn_showQ(51);fn_showQ(82);}
+	if(TV_pattern.test(this.value)){fn_showQ(51);fn_showQ(72);}
+	fn_AllLogics();
+}
+// Field [ strCDA_1158_field_0_22 ] Mapped to [ 1st Save Reason: ]
+fn_getField(22).onchange = function(){
+	fn_2ndSaveReasonList ();
+
+	fn_hideQ(40);
+	fn_hideQ(106);
+	if (this.value == 'Saved due to promotion')
+	{
+		fn_showQ(40);
+
+	}
+	else
+	{
+		fn_hideQ(40);
+
+	}
+
+if (SaveReason1.value == 'Saved due to promotion'){
+		fn_showQ(40);
+	}
+	else{
+		fn_hideQ(40);
+	}
+
+}
+// Field [ strCDA_1158_field_0_23 ] Mapped to [ 2nd Save Reason: ]
+fn_getField(23).onchange = function(){
+	saveReason3();
+fn_hideQuestions(74,75);
+
+if (this.value == 'Replaced CPE')
+{
+	fn_showQ(25);
+}
+ else
+{
+}
+
+if (this.value == 'Mobile upgrade')
+{
+	removeAllOptions(typeOfUpgradeCall);
+	//fn_AddItem(typeOfUpgradeCall, 'eir Mobile Upgrade', 'eir Mobile Upgrade');
+
+	fn_showQuestions(42,43);
+	fn_showQ(74);
+	fn_showQuestions(77,81);
+	fn_ChosenPlan ();
+	eirMobileUpgradeEmail.value = Email.value;
+}
+ else
+{
+	fn_hideQuestions(74,75);
+	fn_hideQuestions(77,80);
+	eirMobileUpgradeEmail == '';
+}
+
+}
+
+// Field [ strCDA_1158_field_0_29 ] Mapped to [ New eir Talk Plan ]
+fn_getField(29).onchange = function(){
+	fn_CashBackOffer();
+}
+// Field [ strCDA_1158_field_0_50 ] Mapped to [ Do you offer the customer a credit? ]
+fn_getField(50).onchange = function(){
+	if (this.value=='Yes')
+{
+	fn_showQuestions(53,54);
+}
+ else
+{
+	fn_hideQuestions(53,54);
+}
+}
+// Field [ strCDA_1158_field_0_53 ] Mapped to [ Credit Amount: ]
+fn_getField(53).onchange = function(){
+	$JQ("#"+str+53).on("keyup", checkCurrency);
+}
+// Field [ strCDA_1158_field_0_85 ] Mapped to [ Did you attempt a Save Plus? ]
+fn_getField(85).onchange = function(){
+	fn_hideQuestions(87,94);
+
+	if (this.value== 'Yes'){
+		fn_SavePlusNonSaleReason ();
+	}
+}
+// Field [ strCDA_1158_field_0_86 ] Mapped to [ Access Non Sale Reason: ]
+fn_getField(86).onchange = function(){
+	if (this.value == 'In contract with another provider')	{
+		document.getElementById('tableid_87').style.display = 'inline';
+	}
+	else{
+		document.getElementById('tableid_87').style.display = 'none';
+	}
+}
+// Field [ strCDA_1158_field_0_88 ] Mapped to [ Broadband Non Sale Reason: ]
+fn_getField(88).onchange = function(){
+	if (this.value == 'In contract with another provider'){
+		document.getElementById('tableid_89').style.display = 'inline';
+	}
+	else{
+		document.getElementById('tableid_89').style.display = 'none';
+	}
+}
+// Field [ strCDA_1158_field_0_90 ] Mapped to [ eVision Non Sale Reason: ]
+fn_getField(90).onchange = function(){
+	if (this.value == 'In contract with another provider')
+	{
+		document.getElementById('tableid_91').style.display = 'inline';
+	}
+	else
+	{
+		document.getElementById('tableid_91').style.display = 'none';
+	}
+
+}
+// Field [ strCDA_1158_field_0_92 ] Mapped to [ eMobile Non Sale Reason: ]
+fn_getField(92).onchange = function(){
+	if (this.value == 'In contract with another provider')
+	{
+		document.getElementById('tableid_93').style.display = 'inline';
+	}
+	else
+	{
+		document.getElementById('tableid_93').style.display = 'none';
+	}
+
+}
+// Field [ strCDA_1158_field_0_26 ] Mapped to [ Type of Cease? ]
+fn_getField(26).onchange = function(){
+
+	fn_hideQuestions(97,101);
+
+
+	if (this.value =='30 day cease')
+	{
+		//New code for Moving Provider question
+		//fn_showQ(30);
+
+		fn_showQ(97);
+		if ((ServiceToCease.value =='eir Mobile' || ServiceToCease.value =='eir Mobile Broadband') && eirMobileSystem.value=='CM')
+		{
+			removeAllOptions(strCDA_1158_field_0_97);
+			fn_AddItem(strCDA_1158_field_0_97, 'Scheduled in CM','Scheduled in CM');
+		}
+		else{
+			removeAllOptions(strCDA_1158_field_0_97);
+			fn_AddItem(strCDA_1158_field_0_97, 'Send customer cessation link','Send customer cessation link');
+			fn_AddItem(strCDA_1158_field_0_97, 'Submit on behalf of customer','Submit on behalf of customer');
+		}
+	}
+/*
+	else if (this.value == 'Immediate cease today') {
+		fn_showQ(94);
+
+	}
+
+	else if (this.value == 'Immediate cease (to be ceased by Back Office in R6)') {
+
+
+	}
+*/
+	else if (this.value == 'Specific cease date requested') {
+		fn_showQ(63);
+
+	}
+}
+// Field [ strCDA_1158_field_0_97 ] Mapped to [ Type of 30 Day Cease: ]
+fn_getField(97).onchange = function(){
+	document.getElementById('tableid_98').style.display = 'none';
+	document.getElementById('tableid_99').style.display = 'none';
+	document.getElementById('tableid_100').style.display = 'none';
+	document.getElementById('tableid_101').style.display = 'none';
+	ceaseOutcomeLink3Blank();
+
+
+	if (this.value =='Submit on behalf of customer')
+	{
+		document.getElementById('tableid_98').style.display = 'inline';
+		document.getElementById('tableid_99').style.display = 'inline';
+		document.getElementById('tableid_100').style.display = 'inline';
+		document.getElementById('tableid_101').style.display = 'inline';
+
+		ceaseOutcomeLink2AgentSubmit();
+	}
+	else if (this.value =='Send customer cessation link')
+	{
+		ceaseOutcomeLink1email();
+	}
+
+
+}
+// Field [ strCDA_1158_field_0_100 ] Mapped to [ Is there active competitors broadband on the account? ]
+fn_getField(100).onchange = function(){
+	ceaseOutcomeLink2AgentSubmit();
+}
+// Field [ strCDA_1158_field_0_52 ] Mapped to [ Did you achieve a sale or recontract? ]
+fn_getField(52).onchange = function(){
+	fn_getField(108).selectedIndex = 0;
+	fn_condShowHide(this.value == 'Sale',[108]);
+	fn_condShowHide(this.value == 'Customer Recontracted',[42,43]);
+
+}
+// Field [ strCDA_1158_field_0_75 ] Mapped to [ Type of Upgrade Call: ]
+fn_getField(75).onchange = function(){
+	fn_hideQuestions(76,81);
+	fn_hideQ(41);
+
+	strContact_Outcome.length = 0;
+
+	if (this.value == 'eir Mobile Upgrade')
+	{
+
+		fn_showQuestions(42,43);
+		fn_showQuestions(77,80);
+		fn_ChosenPlan ();
+
+		if (eirMobileSystem.value == 'CM')
+		{
+			fn_showQ(81);
+		}
+
+		if (CurrentService.value=='eir Mobile Broadband'){
+
+			strContact_Outcome.length = 0;
+			strContact_Outcome.options[strContact_Outcome.length] = new Option('','');
+			strContact_Outcome.options[strContact_Outcome.length] = new Option('MOBILE BROADBAND UPGRADE: Sale', 'MOBILE BROADBAND UPGRADE: Sale');
+		}
+
+	}
+	else if (this.value == 'Non Sale'){
+		fn_showQ(76);
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('','');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('MOBILE UPGRADE: Non Sale', 'MOBILE UPGRADE: Non Sale');
+
+		if (CurrentService.value=='eir Mobile Broadband'){
+
+			strContact_Outcome.length = 0;
+			strContact_Outcome.options[strContact_Outcome.length] = new Option('','');
+			strContact_Outcome.options[strContact_Outcome.length] = new Option('MOBILE BROADBAND UPGRADE: Non Sale', 'MOBILE BROADBAND UPGRADE: Non Sale');
+		}
+
+	}
+	else if (this.value == 'Non Upgradeable'){
+	  fn_showQ(41);
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('','');
+		strContact_Outcome.options[strContact_Outcome.length] = new Option('MOBILE UPGRADE: Non Upgradeable', 'MOBILE UPGRADE: Non Upgradeable');
+
+		if (CurrentService.value=='eir Mobile Broadband'){
+
+			strContact_Outcome.length = 0;
+			//strContact_Outcome.options[strContact_Outcome.length] = new Option('', '');
+			strContact_Outcome.options[strContact_Outcome.length] = new Option('MOBILE BROADBAND UPGRADE: Non Upgradeable', 'MOBILE BROADBAND UPGRADE: Non Upgradeable');
+		}
+
+	}
+
+}
+// Field [ strCDA_1158_field_0_81 ] Mapped to [ Did you migrate the customer to R6? ]
+fn_getField(81).onchange = function(){
+	fn_ChosenPlan();
+}
+// Field [ strCDA_1158_field_0_25 ] Mapped to [ Is a mobile return or exchange required? ]
+fn_getField(25).onchange = function(){
+	fn_condShowHide( /(Return|Exchange)/.test(this.value), [32,33,34,35,39,70]);
+	fn_condShowHide(this.value == 'Exchange',[84]);
+}
+// Field [ strCDA_1158_field_0_33 ] Mapped to [ Handset IMEI: ]
+fn_getField(33).onchange = function(){
+	if (this.value == 'Yes') {
+    document.getElementById('tableid_35').style.display = 'inline';
+    document.getElementById('tableid_36').style.display = 'inline';
+    document.getElementById('tableid_56').style.display = 'inline';
+    document.getElementById('tableid_37').style.display = 'none';
+}
+
+if (this.value == 'No') {
+    document.getElementById('tableid_35').style.display = 'none';
+    document.getElementById('tableid_36').style.display = 'none';
+    document.getElementById('tableid_56').style.display = 'none';
+    document.getElementById('tableid_37').style.display = 'inline';
+}
+
+
+}
+// Field [ strCDA_1158_field_0_70 ] Mapped to [ Reason for Return: ]
+fn_getField(70).onchange = function(){
+	if (this.value == 'Fault')
+	{
+		fn_showQ(71);
+	}
+	else
+	{
+		fn_hideQ(71);
+	}
+}
+// Field [ strCDA_1158_field_0_108 ] Mapped to [ What services did you sell? ]
+fn_getField(108).onchange = function(){
+	fn_AllLogics();
+}
+// Field [ strCDA_1158_field_0_109 ] Mapped to [ Did customer avail of â‚¬100 cashback offer? ]
+fn_getField(109).onchange = function(){
+	if(this.value == '25 euro cashback')alert('NGB BROADBAND ONLY for 25 euro cashback!!');
+	if(this.value == '100 euro cashback')alert('International/Mobile&UK only for 100 euro cashback!!');
+}
